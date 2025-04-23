@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: analytics-claude-mcp
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: PORT
+        value: 10000
+    autoDeploy: true
