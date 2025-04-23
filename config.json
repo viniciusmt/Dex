@@ -1,0 +1,6 @@
+{
+  "id": "meu_mcp",
+  "name": "Meu MCP de Teste",
+  "command": "python main.py",
+  "description": "Agente que repete o que você digita"
+}
