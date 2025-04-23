@@ -119,7 +119,7 @@ Somente JSON. Nenhuma explicação.
 
         # Consulta Claude
         response = client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model="claude-3-5-haiku-20241022",
             max_tokens=1000,
             temperature=0,
             messages=[prompt_sistema, prompt_usuario]
