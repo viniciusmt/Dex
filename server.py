@@ -317,6 +317,11 @@ try:
 except Exception as e:
     print(f"Erro ao registrar router MCP: {e}", file=sys.stderr)
 
+# Endpoint necessário para validação da URL no ChatGPT (exige 'servers')
+@app.get("/.well-known/openapi.json")
+def openapi_schema():
+    return app.openapi()
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     print(f"Iniciando servidor na porta {port}", file=sys.stderr)
