@@ -2,7 +2,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 
-SERVICE_ACCOUNT_FILE = r"C:\Users\Vinicius\Projetos\agent_mcp\agents\projeto-apis-408113-b4cfe422134b.json"
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_CREDENTIALS")
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 service = build("searchconsole", "v1", credentials=credentials)

@@ -17,7 +17,7 @@ import json
 from google.oauth2 import service_account
 
 # Caminho da credencial
-credentials_path = "C:/Users/Vinicius/Projetos/agent_mcp/agents/projeto-apis-408113-b4cfe422134b.json"
+credentials_path = os.getenv("GOOGLE_CREDENTIALS")
 property_id = "properties/254018746"
 
 credentials = service_account.Credentials.from_service_account_file(credentials_path)
