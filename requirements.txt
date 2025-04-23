@@ -1,0 +1,21 @@
+# Web framework
+fastapi
+uvicorn
+
+# Claude API
+anthropic
+
+# Google APIs
+google-auth
+google-analytics-data
+google-api-python-client
+
+# NLP e análise textual
+nltk
+langdetect
+
+# Utilitários e suporte
+requests
+pandas
+python-dotenv
+pydantic
