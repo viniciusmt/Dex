@@ -52,5 +52,8 @@ def analise_youtube(pergunta: str) -> dict:
     return youtube.youtube_analyzer(pergunta)
 
 
+import os
+
 if __name__ == "__main__":
-    mcp.run()
+    port = int(os.getenv("PORT", 10000))  # Render fornece a porta via env
+    mcp.run(host="0.0.0.0", port=port)
