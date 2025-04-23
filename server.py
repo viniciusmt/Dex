@@ -3,6 +3,7 @@ from agents import analytics  # módulo GA4
 import agents.search_console as search_console
 import agents.youtube as youtube
 
+# Create the FastMCP app
 mcp = FastMCP("analytics-agent")
 
 @mcp.tool()
@@ -59,4 +60,26 @@ import uvicorn
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
-    uvicorn.run(mcp.fastapi_app, host="0.0.0.0", port=port)
+    
+    # Fix: Access the FastAPI app properly based on the current FastMCP implementation
+    # The app property may now be called 'app' instead of 'fastapi_app'
+    app = mcp.app if hasattr(mcp, 'app') else mcp.fastapi_app
+    
+    # For newer versions, FastMCP may directly return a FastAPI app
+    if app is None and callable(mcp):
+        app = mcp()
+    
+    # As a fallback, create a FastAPI app directly using the MCP router
+    if app is None and hasattr(mcp, 'router'):
+        from fastapi import FastAPI
+        app = FastAPI()
+        app.include_router(mcp.router)
+    
+    # Final fallback if none of the above works
+    if app is None:
+        raise AttributeError(
+            "Unable to find FastAPI app in FastMCP object. "
+            "Please check the FastMCP SDK documentation for the correct API."
+        )
+    
+    uvicorn.run(app, host="0.0.0.0", port=port)
