@@ -1,8 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 from agents import analytics  # módulo GA4
-from agents import trends     # módulo Google Trends
 import agents.search_console as search_console  # Corrigida a importação
-import agents.search_terms as search_terms  # Novo módulo para buscar termos
 import agents.youtube as youtube
 
 mcp = FastMCP("analytics-agent")
