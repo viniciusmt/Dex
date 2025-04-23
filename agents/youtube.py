@@ -17,6 +17,8 @@ except LookupError:
 API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 def youtube_service():
+    if not API_KEY:
+        raise ValueError("YOUTUBE_API_KEY não encontrada nas variáveis de ambiente")
     return build("youtube", "v3", developerKey=API_KEY)
 
 def extrair_termo(pergunta: str) -> str:
@@ -73,6 +75,12 @@ def tokenizar_texto(texto):
     return re.findall(r'\b\w{3,}\b', texto.lower(), flags=re.UNICODE)
 
 def analisar_textos(textos):
+    if not textos:
+        return {
+            "palavras_mais_comuns": [],
+            "bigramas_mais_comuns": []
+        }
+    
     stop_pt = set(stopwords.words('portuguese'))
     palavras, bigramas = [], []
 
@@ -90,16 +98,47 @@ def youtube_analyzer(pergunta):
     # Check if API key is available
     if not API_KEY:
         return {
-            "erro": "API_KEY do YouTube não encontrada nas variáveis de ambiente"
+            "erro": "API_KEY do YouTube não encontrada nas variáveis de ambiente",
+            "termo_extraido": extrair_termo(pergunta),
+            "videos_encontrados": 0,
+            "comentarios_analisados": 0,
+            "analise": {
+                "palavras_mais_comuns": [],
+                "bigramas_mais_comuns": []
+            }
         }
+    
+    try:    
+        termo = extrair_termo(pergunta)
+        video_ids = buscar_videos(termo)
         
-    termo = extrair_termo(pergunta)
-    video_ids = buscar_videos(termo)
-    comentarios = buscar_comentarios(video_ids)
-    analise = analisar_textos(comentarios)
-    return {
-        "termo_extraido": termo,
-        "videos_encontrados": len(video_ids),
-        "comentarios_analisados": len(comentarios),
-        "analise": analise
-    }
+        if not video_ids:
+            return {
+                "termo_extraido": termo,
+                "videos_encontrados": 0,
+                "comentarios_analisados": 0,
+                "analise": {
+                    "palavras_mais_comuns": [],
+                    "bigramas_mais_comuns": []
+                }
+            }
+            
+        comentarios = buscar_comentarios(video_ids)
+        analise = analisar_textos(comentarios)
+        return {
+            "termo_extraido": termo,
+            "videos_encontrados": len(video_ids),
+            "comentarios_analisados": len(comentarios),
+            "analise": analise
+        }
+    except Exception as e:
+        return {
+            "erro": str(e),
+            "termo_extraido": extrair_termo(pergunta) if 'termo' not in locals() else termo,
+            "videos_encontrados": len(video_ids) if 'video_ids' in locals() else 0,
+            "comentarios_analisados": len(comentarios) if 'comentarios' in locals() else 0,
+            "analise": {
+                "palavras_mais_comuns": [],
+                "bigramas_mais_comuns": []
+            }
+        }
