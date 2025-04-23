@@ -1,27 +1,23 @@
-from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import (
-    RunReportRequest,
-    RunPivotReportRequest,
-    DateRange,
-    Dimension,
-    Metric,
-    FilterExpression,
-    Filter,
-    Pivot,
-    OrderBy
-)
-from google.analytics.data_v1beta.types import Filter as GAFilter  # para acessar enums
-
 import os
 import json
 from google.oauth2 import service_account
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import (
+    RunReportRequest, RunPivotReportRequest,
+    DateRange, Dimension, Metric,
+    FilterExpression, Filter, Pivot, OrderBy
+)
+from google.analytics.data_v1beta.types import Filter as GAFilter
 
-# Caminho da credencial
-credentials_path = os.getenv("GOOGLE_CREDENTIALS")
+# Lê credenciais do JSON como string (vinda de variável de ambiente)
+creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+credentials = service_account.Credentials.from_service_account_info(creds_dict)
+client = BetaAnalyticsDataClient(credentials=credentials)
+
 property_id = "properties/254018746"
 
-credentials = service_account.Credentials.from_service_account_file(credentials_path)
-client = BetaAnalyticsDataClient(credentials=credentials)
+# (Mantém as funções consulta_ga4 e consulta_ga4_pivot exatamente como estão)
+# Sem necessidade de ajuste interno, pois o client agora está validado
 
 
 

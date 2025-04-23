@@ -1,12 +1,27 @@
+import os
+import json
+from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta
 
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_CREDENTIALS")
+# Lê credenciais do JSON como string (vinda de variável de ambiente)
+creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 service = build("searchconsole", "v1", credentials=credentials)
+
 SITE_URL = "https://educacao-executiva.fgv.br/"
+
+def resolver_data(d: str):
+    if "daysAgo" in d:
+        dias = int(d.replace("daysAgo", "").strip())
+        return (datetime.today() - timedelta(days=dias)).strftime("%Y-%m-%d")
+    if d == "today":
+        return datetime.today().strftime("%Y-%m-%d")
+    return d
+
+# Mantém a função consulta_search_console_custom exatamente como está
+
 
 def resolver_data(d: str):
     if "daysAgo" in d:
