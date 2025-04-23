@@ -5,6 +5,7 @@ import re
 import nltk
 from nltk.corpus import stopwords
 from langdetect import detect, LangDetectException
+import os
 
 # Baixa apenas as stopwords
 try:
@@ -12,7 +13,8 @@ try:
 except LookupError:
     nltk.download("stopwords")
 
-API_KEY = "AIzaSyAQFkpjfUbdk2m4btrCI5faimhDhiFmBAM"  # <-- Substitua pela sua chave real da API YouTube
+# Load the API key from environment variables instead of hardcoding
+API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 def youtube_service():
     return build("youtube", "v3", developerKey=API_KEY)
@@ -85,6 +87,12 @@ def analisar_textos(textos):
     }
 
 def youtube_analyzer(pergunta):
+    # Check if API key is available
+    if not API_KEY:
+        return {
+            "erro": "API_KEY do YouTube não encontrada nas variáveis de ambiente"
+        }
+        
     termo = extrair_termo(pergunta)
     video_ids = buscar_videos(termo)
     comentarios = buscar_comentarios(video_ids)
