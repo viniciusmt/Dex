@@ -317,6 +317,29 @@ try:
 except Exception as e:
     print(f"Erro ao registrar router MCP: {e}", file=sys.stderr)
 
+
+from fastapi.openapi.utils import get_openapi
+
+# Customiza o schema OpenAPI com o campo 'servers' corretamente definido
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="Analytics Agent API",
+        version="1.0.0",
+        description="API que interpreta perguntas em linguagem natural para gerar análises com GA4, Search Console e YouTube",
+        routes=app.routes,
+    )
+    openapi_schema["servers"] = [
+        {"url": "https://dex-mcp-server-1212.onrender.com"}
+    ]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+
+
 # Endpoint necessário para validação da URL no ChatGPT (exige 'servers')
 @app.get("/.well-known/openapi.json")
 def openapi_schema():
