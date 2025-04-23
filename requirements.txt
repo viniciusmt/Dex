@@ -20,5 +20,6 @@ pandas
 python-dotenv
 pydantic
 
-# MCP SDK (FastMCP)
-git+https://github.com/modelcontextprotocol/python-sdk.git
+# SDK FastMCP atualizado
+git+https://github.com/modelcontextprotocol/python-sdk.git@main
+
