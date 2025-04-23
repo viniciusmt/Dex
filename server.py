@@ -89,19 +89,15 @@ async def perguntar(query: NaturalLanguageQuery):
         if not ANTHROPIC_API_KEY:
             raise HTTPException(status_code=500, detail="Chave API do Claude não configurada")
 
-        # Prompt estruturado com role system
-        prompt_sistema = {
-            "role": "system",
-            "content": (
-                "Você é um assistente de analytics. Seu trabalho é transformar perguntas em linguagem natural "
-                "em objetos JSON com o formato especificado. Responda APENAS com JSON VÁLIDO. Sem explicações. "
-                "Sem formatação Markdown. Sem prefixos ou sufixos. Apenas JSON puro."
-            )
-        }
+        # Prompt de sistema
+        system_prompt = (
+            "Você é um assistente de analytics. Seu trabalho é transformar perguntas em linguagem natural "
+            "em objetos JSON válidos com o formato especificado. Responda SOMENTE com JSON puro. "
+            "Sem explicações. Sem formatação Markdown. Sem prefixos ou sufixos. Apenas JSON."
+        )
 
-        prompt_usuario = {
-            "role": "user",
-            "content": f"""
+        # Prompt do usuário com instruções
+        user_prompt = f"""
 Pergunta: {query.pergunta}
 
 Retorne um JSON neste formato:
@@ -113,22 +109,26 @@ Retorne um JSON neste formato:
   }}
 }}
 
-Somente JSON. Nenhuma explicação.
+Apenas o JSON. Nenhuma explicação.
 """
-        }
 
-        # Consulta Claude
         response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-3-5-sonnet-20240620",
             max_tokens=1000,
             temperature=0,
-            messages=[prompt_sistema, prompt_usuario]
+            system=system_prompt,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": user_prompt}]
+                }
+            ]
         )
 
         content = response.content[0].text.strip()
         print(f"[Claude output bruto]\n{content}\n", file=sys.stderr)
 
-        # Limpa possíveis marcações indevidas
+        # Remove marcações de código caso existam
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
@@ -177,23 +177,18 @@ Somente JSON. Nenhuma explicação.
         else:
             raise HTTPException(status_code=400, detail=f"Tipo de consulta não reconhecido: {tipo_consulta}")
 
-        # Interpretação dos dados com Claude
-        interpretation_prompt = f"""
-Você é um assistente de analytics.
-Interprete os resultados abaixo com base na pergunta original.
-Forneça uma explicação simples, clara e objetiva.
-
-Pergunta: {query.pergunta}
-
-Resultados:
-{resultado}
-"""
-
-        interpretation = client.messages.create(
-            model="claude-3-sonnet-20240229",
+        # Interpretação com Claude (em linguagem natural)
+        interpretacao_response = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
             max_tokens=1500,
             temperature=0.2,
-            messages=[{"role": "user", "content": interpretation_prompt}]
+            system="Você é um assistente de analytics. Interprete resultados com base na pergunta original e forneça uma explicação clara.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": f"Pergunta: {query.pergunta}\n\nResultados:\n{resultado}"}]
+                }
+            ]
         )
 
         return {
@@ -201,12 +196,13 @@ Resultados:
             "tipo_consulta": tipo_consulta,
             "parametros": parametros,
             "resultado_bruto": resultado,
-            "interpretacao": interpretation.content[0].text.strip()
+            "interpretacao": interpretacao_response.content[0].text.strip()
         }
 
     except Exception as e:
         print(f"[Erro geral] {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro ao processar pergunta: {str(e)}")
+
 
 
 # Endpoint direto para consulta GA4
