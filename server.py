@@ -1,6 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 from agents import analytics  # módulo GA4
-import agents.search_console as search_console  # Corrigida a importação
+import agents.search_console as search_console
 import agents.youtube as youtube
 
 mcp = FastMCP("analytics-agent")
@@ -44,16 +44,19 @@ def consulta_search_console_custom(
     filtros: list[dict] = None,
     limite: int = 20
 ) -> dict:
-    return search_console.consulta_search_console_custom(data_inicio, data_fim, dimensoes, metrica_extra, filtros, limite)
-
+    return search_console.consulta_search_console_custom(
+        data_inicio, data_fim, dimensoes, metrica_extra, filtros, limite
+    )
 
 @mcp.tool()
 def analise_youtube(pergunta: str) -> dict:
     return youtube.youtube_analyzer(pergunta)
 
 
+# ✅ Compatível com Render usando Uvicorn e a porta do ambiente
 import os
+import uvicorn
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 10000))  # Render fornece a porta via env
-    mcp.run(host="0.0.0.0", port=port)
+    port = int(os.getenv("PORT", 10000))
+    uvicorn.run(mcp.fastapi_app, host="0.0.0.0", port=port)
