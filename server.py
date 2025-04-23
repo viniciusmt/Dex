@@ -88,72 +88,60 @@ async def perguntar(query: NaturalLanguageQuery):
     try:
         if not ANTHROPIC_API_KEY:
             raise HTTPException(status_code=500, detail="Chave API do Claude não configurada")
-        
-        # Constrói o prompt para o Claude
-        prompt = f"""
-        Você é um assistente de analytics especializado em consultas de dados. 
-        Baseado na pergunta do usuário, determine qual tipo de consulta deve ser feita.
 
-        Pergunta do usuário: {query.pergunta}
+        # Prompt estruturado com role system
+        prompt_sistema = {
+            "role": "system",
+            "content": (
+                "Você é um assistente de analytics. Seu trabalho é transformar perguntas em linguagem natural "
+                "em objetos JSON com o formato especificado. Responda APENAS com JSON VÁLIDO. Sem explicações. "
+                "Sem formatação Markdown. Sem prefixos ou sufixos. Apenas JSON puro."
+            )
+        }
 
-        Para responder, interprete a pergunta e retorne um objeto JSON com o seguinte formato:
-        {{
-            "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube",
-            "parametros": {{
-                // parâmetros específicos para o tipo de consulta
-            }}
-        }}
+        prompt_usuario = {
+            "role": "user",
+            "content": f"""
+Pergunta: {query.pergunta}
 
-        Para consultas GA4 (tipo_consulta: "ga4"), os parâmetros são:
-        - dimensao: string (padrão "country")
-        - metrica: string (padrão "sessions")
-        - periodo: string (padrão "7daysAgo")
-        - filtro_campo: string (opcional)
-        - filtro_valor: string (opcional)
-        - filtro_condicao: string (opcional, padrão "igual")
+Retorne um JSON neste formato:
 
-        Para consultas GA4 Pivot (tipo_consulta: "ga4_pivot"), os parâmetros adicionais são:
-        - dimensao_pivot: string (padrão "deviceCategory")
-        - limite_linhas: número (padrão 30)
+{{
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube",
+  "parametros": {{
+    // parâmetros relevantes conforme o tipo
+  }}
+}}
 
-        Para consultas Search Console (tipo_consulta: "search_console"), os parâmetros são:
-        - data_inicio: string (padrão "30daysAgo")
-        - data_fim: string (padrão "today")
-        - dimensoes: lista de strings (padrão ["query"])
-        - metrica_extra: boolean (padrão true)
-        - filtros: lista de objetos (opcional)
-        - limite: número (padrão 20)
+Somente JSON. Nenhuma explicação.
+"""
+        }
 
-        Para consultas YouTube (tipo_consulta: "youtube"), os parâmetros são:
-        - pergunta: string
-
-        Retorne APENAS o JSON, sem texto adicional.
-        """
-
-        # Consulta o Claude
+        # Consulta Claude
         response = client.messages.create(
             model="claude-3-sonnet-20240229",
             max_tokens=1000,
             temperature=0,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[prompt_sistema, prompt_usuario]
         )
 
-        # Extrai a resposta
         content = response.content[0].text.strip()
-        
-        # Remove quaisquer marcações de código que o Claude possa ter adicionado
+        print(f"[Claude output bruto]\n{content}\n", file=sys.stderr)
+
+        # Limpa possíveis marcações indevidas
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
-            
-        # Analisa o JSON
-        parsed_response = json.loads(content)
-        
-        # Determina qual consulta executar
+
+        try:
+            parsed_response = json.loads(content)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Erro ao interpretar JSON do Claude: {e}\nConteúdo: {content}")
+
         tipo_consulta = parsed_response.get("tipo_consulta")
         parametros = parsed_response.get("parametros", {})
-        
+
         # Executa a consulta apropriada
         if tipo_consulta == "ga4":
             resultado = analytics.consulta_ga4(
@@ -188,22 +176,19 @@ async def perguntar(query: NaturalLanguageQuery):
             resultado = youtube.youtube_analyzer(parametros.get("pergunta", query.pergunta))
         else:
             raise HTTPException(status_code=400, detail=f"Tipo de consulta não reconhecido: {tipo_consulta}")
-        
-        # Agora vamos usar o Claude para interpretar o resultado e dar uma resposta em linguagem natural
+
+        # Interpretação dos dados com Claude
         interpretation_prompt = f"""
-        Você é um assistente de analytics especializado em interpretar resultados de consultas de dados.
-        Baseado na pergunta do usuário e nos resultados da consulta, forneça uma interpretação clara e concisa.
+Você é um assistente de analytics.
+Interprete os resultados abaixo com base na pergunta original.
+Forneça uma explicação simples, clara e objetiva.
 
-        Pergunta original do usuário: {query.pergunta}
+Pergunta: {query.pergunta}
 
-        Resultados da consulta:
-        {resultado}
+Resultados:
+{resultado}
+"""
 
-        Forneça uma resposta em linguagem natural que explique os resultados da consulta de forma clara e concisa.
-        Se apropriado, inclua insights sobre os dados e possíveis implicações para o negócio.
-        """
-
-        # Consulta o Claude para interpretação
         interpretation = client.messages.create(
             model="claude-3-sonnet-20240229",
             max_tokens=1500,
@@ -211,18 +196,18 @@ async def perguntar(query: NaturalLanguageQuery):
             messages=[{"role": "user", "content": interpretation_prompt}]
         )
 
-        # Retorna tanto os dados brutos quanto a interpretação
         return {
             "pergunta": query.pergunta,
             "tipo_consulta": tipo_consulta,
             "parametros": parametros,
             "resultado_bruto": resultado,
-            "interpretacao": interpretation.content[0].text
+            "interpretacao": interpretation.content[0].text.strip()
         }
-        
+
     except Exception as e:
-        print(f"Erro ao processar pergunta: {str(e)}", file=sys.stderr)
+        print(f"[Erro geral] {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro ao processar pergunta: {str(e)}")
+
 
 # Endpoint direto para consulta GA4
 @app.post("/api/consulta_ga4")
