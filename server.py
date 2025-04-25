@@ -64,7 +64,7 @@ class GA4PivotQuery(BaseModel):
         default="igual",
         description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
     )
-    limite_linhas: int = 30
+    limite_linhas: int = 100
 
 class SearchConsoleQuery(BaseModel):
     data_inicio: str = "30daysAgo"
