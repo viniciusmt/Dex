@@ -10,8 +10,8 @@ import uvicorn
 import sys
 import json
 import anthropic
-from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, List, Literal
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -48,7 +48,10 @@ class GA4Query(BaseModel):
     periodo: str = "7daysAgo"
     filtro_campo: str = ""
     filtro_valor: str = ""
-    filtro_condicao: str = "igual"
+    filtro_condicao: str = Field(
+        default="igual",
+        description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
+    )
 
 class GA4PivotQuery(BaseModel):
     dimensao: str = "country"
@@ -57,7 +60,10 @@ class GA4PivotQuery(BaseModel):
     periodo: str = "7daysAgo"
     filtro_campo: str = ""
     filtro_valor: str = ""
-    filtro_condicao: str = "igual"
+    filtro_condicao: str = Field(
+        default="igual",
+        description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
+    )
     limite_linhas: int = 30
 
 class SearchConsoleQuery(BaseModel):
@@ -93,6 +99,8 @@ Retorne um JSON neste formato:
   "parametros": {{}}
 }}
 
+Para filtros GA4, use a condição "contem" (sem acento) para buscas parciais.
+
 Apenas o JSON. Nenhuma explicação.
 """
 
@@ -111,6 +119,11 @@ Apenas o JSON. Nenhuma explicação.
         parsed_response = json.loads(content)
         tipo_consulta = parsed_response.get("tipo_consulta")
         parametros = parsed_response.get("parametros", {})
+        
+        # Correção para garantir que "contem" esteja no formato correto
+        if "filtro_condicao" in parametros and parametros["filtro_condicao"] in ["contém", "contains", "contém"]:
+            parametros["filtro_condicao"] = "contem"
+            print(f"DIAGNÓSTICO: Convertendo condição de filtro para 'contem'", file=sys.stderr)
 
         if tipo_consulta == "ga4":
             resultado = analytics.consulta_ga4(**parametros)
@@ -146,6 +159,11 @@ Apenas o JSON. Nenhuma explicação.
 @app.post("/api/consulta_ga4")
 async def api_consulta_ga4(query: GA4Query):
     try:
+        # Garantir que "contem" esteja no formato correto
+        if query.filtro_condicao in ["contém", "contains", "contém"]:
+            query.filtro_condicao = "contem"
+            print(f"DIAGNÓSTICO API: Convertendo condição de filtro para 'contem'", file=sys.stderr)
+        
         result = analytics.consulta_ga4(**query.dict())
         return {"result": result}
     except Exception as e:
@@ -154,6 +172,11 @@ async def api_consulta_ga4(query: GA4Query):
 @app.post("/api/consulta_ga4_pivot")
 async def api_consulta_ga4_pivot(query: GA4PivotQuery):
     try:
+        # Garantir que "contem" esteja no formato correto
+        if query.filtro_condicao in ["contém", "contains", "contém"]:
+            query.filtro_condicao = "contem"
+            print(f"DIAGNÓSTICO API PIVOT: Convertendo condição de filtro para 'contem'", file=sys.stderr)
+        
         result = analytics.consulta_ga4_pivot(**query.dict())
         return {"result": result}
     except Exception as e:
@@ -179,12 +202,36 @@ async def api_analise_youtube(query: YouTubeQuery):
 async def list_routes():
     return {"routes": [{"path": r.path, "methods": list(r.methods)} for r in app.routes]}
 
+@app.get("/debug/filter_test")
+async def test_filter_conditions():
+    """Endpoint para testar as condições de filtro do GA4"""
+    condicoes = [
+        "igual", "contem", "contém", "contains", 
+        "começa com", "comeca com", "begins_with",
+        "termina com", "ends_with", "regex"
+    ]
+    
+    return {
+        "condicoes_suportadas": condicoes,
+        "nota": "Use 'contem' (sem acento) para consultas que contêm um valor parcial."
+    }
+
 @mcp.tool()
 def consulta_ga4(**kwargs) -> str:
+    # Garantir que "contem" esteja no formato correto
+    if "filtro_condicao" in kwargs and kwargs["filtro_condicao"] in ["contém", "contains", "contém"]:
+        kwargs["filtro_condicao"] = "contem"
+        print(f"DIAGNÓSTICO MCP: Convertendo condição de filtro para 'contem'", file=sys.stderr)
+    
     return analytics.consulta_ga4(**kwargs)
 
 @mcp.tool()
 def consulta_ga4_pivot(**kwargs) -> str:
+    # Garantir que "contem" esteja no formato correto
+    if "filtro_condicao" in kwargs and kwargs["filtro_condicao"] in ["contém", "contains", "contém"]:
+        kwargs["filtro_condicao"] = "contem"
+        print(f"DIAGNÓSTICO MCP PIVOT: Convertendo condição de filtro para 'contem'", file=sys.stderr)
+    
     return analytics.consulta_ga4_pivot(**kwargs)
 
 @mcp.tool()
