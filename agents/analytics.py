@@ -140,7 +140,7 @@ def consulta_ga4(
         resultado = [" | ".join(headers)]
 
         # Limita a 30 linhas
-        for row in response.rows[:30]:
+        for row in response.rows[:100]:
             dim_vals = [d.value for d in row.dimension_values]
             met_vals = [m.value for m in row.metric_values]
             resultado.append(" | ".join(dim_vals + met_vals))
