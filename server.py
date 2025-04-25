@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from agents import analytics
 import agents.search_console as search_console
 import agents.youtube as youtube
+import agents.drive as drive  # Importa o novo módulo de drive
 import os
 import uvicorn
 import sys
@@ -77,6 +78,32 @@ class SearchConsoleQuery(BaseModel):
 class YouTubeQuery(BaseModel):
     pergunta: str
 
+# Novas classes para as operações de Drive/Sheets
+class CriarPlanilhaRequest(BaseModel):
+    nome_planilha: str
+    email_compartilhamento: str = "vinicius.matsumoto@fgv.br"
+
+class ListarPlanilhasRequest(BaseModel):
+    limite: int = 20
+
+class CriarAbaRequest(BaseModel):
+    planilha_id: str
+    nome_aba: str
+    linhas: int = 100
+    colunas: int = 20
+
+class SobrescreverAbaRequest(BaseModel):
+    planilha_id: str
+    nome_aba: str
+    dados: str
+    formato: str = "auto"  # "json", "csv" ou "auto"
+
+class AdicionarCelulasRequest(BaseModel):
+    planilha_id: str
+    nome_aba: str
+    dados: str
+    formato: str = "auto"  # "json", "csv" ou "auto"
+
 @app.post("/perguntar")
 async def perguntar(query: NaturalLanguageQuery):
     try:
@@ -95,7 +122,7 @@ Pergunta: {query.pergunta}
 Retorne um JSON neste formato:
 
 {{
-  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube",
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas",
   "parametros": {{}}
 }}
 
@@ -125,6 +152,7 @@ Apenas o JSON. Nenhuma explicação.
             parametros["filtro_condicao"] = "contem"
             print(f"DIAGNÓSTICO: Convertendo condição de filtro para 'contem'", file=sys.stderr)
 
+        # Determina qual função chamar com base no tipo de consulta
         if tipo_consulta == "ga4":
             resultado = analytics.consulta_ga4(**parametros)
         elif tipo_consulta == "ga4_pivot":
@@ -133,6 +161,35 @@ Apenas o JSON. Nenhuma explicação.
             resultado = search_console.consulta_search_console_custom(**parametros)
         elif tipo_consulta == "youtube":
             resultado = youtube.youtube_analyzer(parametros.get("pergunta", query.pergunta))
+        # Novas operações de Drive
+        elif tipo_consulta == "drive_criar_planilha":
+            resultado = drive.criar_planilha(**parametros)
+        elif tipo_consulta == "drive_listar_planilhas":
+            resultado = drive.listar_planilhas(**parametros)
+        elif tipo_consulta == "drive_criar_aba":
+            resultado = drive.criar_nova_aba(**parametros)
+        elif tipo_consulta == "drive_sobrescrever_aba":
+            # Converter os dados para o formato esperado pelo Google Sheets
+            if "dados" in parametros and "formato" in parametros:
+                dados_convertidos = drive.dados_para_lista(
+                    parametros["dados"],
+                    parametros["formato"]
+                )
+                parametros["dados"] = dados_convertidos
+                # Remove o parâmetro formato que não é usado pela função sobrescrever_aba
+                parametros.pop("formato", None)
+            resultado = drive.sobrescrever_aba(**parametros)
+        elif tipo_consulta == "drive_adicionar_celulas":
+            # Converter os dados para o formato esperado pelo Google Sheets
+            if "dados" in parametros and "formato" in parametros:
+                dados_convertidos = drive.dados_para_lista(
+                    parametros["dados"],
+                    parametros["formato"]
+                )
+                parametros["dados"] = dados_convertidos
+                # Remove o parâmetro formato que não é usado pela função adicionar_celulas
+                parametros.pop("formato", None)
+            resultado = drive.adicionar_celulas(**parametros)
         else:
             raise HTTPException(status_code=400, detail="Tipo de consulta não reconhecido")
 
@@ -141,7 +198,7 @@ Apenas o JSON. Nenhuma explicação.
             max_tokens=1500,
             temperature=0.2,
             system="Você é um assistente de analytics. Interprete resultados com base na pergunta original e forneça uma explicação clara.",
-            messages=[{"role": "user", "content": [{"type": "text", "text": f"Pergunta: {query.pergunta}\n\nResultados:\n{resultado}"}]}]
+            messages=[{"role": "user", "content": [{"type": "text", "text": f"Pergunta: {query.pergunta}\n\nResultados:\n{json.dumps(resultado, ensure_ascii=False, indent=2)}"}]}]
         )
 
         return {
@@ -198,6 +255,61 @@ async def api_analise_youtube(query: YouTubeQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Novos endpoints para as operações de Drive/Sheets
+@app.post("/api/drive/criar_planilha")
+async def api_criar_planilha(query: CriarPlanilhaRequest):
+    try:
+        result = drive.criar_planilha(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/listar_planilhas")
+async def api_listar_planilhas(query: ListarPlanilhasRequest):
+    try:
+        result = drive.listar_planilhas(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/criar_aba")
+async def api_criar_aba(query: CriarAbaRequest):
+    try:
+        result = drive.criar_nova_aba(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/sobrescrever_aba")
+async def api_sobrescrever_aba(query: SobrescreverAbaRequest):
+    try:
+        # Converte os dados para o formato esperado pelo Google Sheets
+        dados_convertidos = drive.dados_para_lista(query.dados, query.formato)
+        # Atualiza o objeto de consulta
+        query_dict = query.dict()
+        query_dict["dados"] = dados_convertidos
+        query_dict.pop("formato")  # Remove o campo formato que não é usado pela função
+        
+        result = drive.sobrescrever_aba(**query_dict)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/adicionar_celulas")
+async def api_adicionar_celulas(query: AdicionarCelulasRequest):
+    try:
+        # Converte os dados para o formato esperado pelo Google Sheets
+        dados_convertidos = drive.dados_para_lista(query.dados, query.formato)
+        # Atualiza o objeto de consulta
+        query_dict = query.dict()
+        query_dict["dados"] = dados_convertidos
+        query_dict.pop("formato")  # Remove o campo formato que não é usado pela função
+        
+        result = drive.adicionar_celulas(**query_dict)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/debug/routes")
 async def list_routes():
     return {"routes": [{"path": r.path, "methods": list(r.methods)} for r in app.routes]}
@@ -242,6 +354,69 @@ def consulta_search_console_custom(**kwargs) -> dict:
 def analise_youtube(pergunta: str) -> dict:
     return youtube.youtube_analyzer(pergunta)
 
+# Registrando as novas ferramentas MCP para o Google Drive/Sheets
+@mcp.tool()
+def drive_criar_planilha(nome_planilha: str, email_compartilhamento: str = "vinicius.matsumoto@fgv.br") -> dict:
+    """
+    Cria uma nova planilha no Google Drive e a compartilha com o email especificado.
+    
+    Args:
+        nome_planilha: Nome da nova planilha
+        email_compartilhamento: Email com quem compartilhar (padrão: vinicius.matsumoto@fgv.br)
+    """
+    return drive.criar_planilha(nome_planilha, email_compartilhamento)
+
+@mcp.tool()
+def drive_listar_planilhas(limite: int = 20) -> dict:
+    """
+    Lista todas as planilhas às quais a conta de serviço tem acesso.
+    
+    Args:
+        limite: Número máximo de planilhas a listar
+    """
+    return drive.listar_planilhas(limite)
+
+@mcp.tool()
+def drive_criar_aba(planilha_id: str, nome_aba: str, linhas: int = 100, colunas: int = 20) -> dict:
+    """
+    Cria uma nova aba em uma planilha existente.
+    
+    Args:
+        planilha_id: ID da planilha no Google Drive
+        nome_aba: Nome da nova aba
+        linhas: Número de linhas na nova aba
+        colunas: Número de colunas na nova aba
+    """
+    return drive.criar_nova_aba(planilha_id, nome_aba, linhas, colunas)
+
+@mcp.tool()
+def drive_sobrescrever_aba(planilha_id: str, nome_aba: str, dados: str, formato: str = "auto") -> dict:
+    """
+    Sobrescreve completamente o conteúdo de uma aba existente.
+    
+    Args:
+        planilha_id: ID da planilha no Google Drive
+        nome_aba: Nome da aba a ser sobrescrita
+        dados: String JSON ou CSV com os dados a serem escritos
+        formato: "json", "csv" ou "auto" para detecção automática
+    """
+    dados_convertidos = drive.dados_para_lista(dados, formato)
+    return drive.sobrescrever_aba(planilha_id, nome_aba, dados_convertidos)
+
+@mcp.tool()
+def drive_adicionar_celulas(planilha_id: str, nome_aba: str, dados: str, formato: str = "auto") -> dict:
+    """
+    Adiciona dados a uma aba existente, sem sobrescrever dados existentes.
+    
+    Args:
+        planilha_id: ID da planilha no Google Drive
+        nome_aba: Nome da aba onde adicionar dados
+        dados: String JSON ou CSV com os dados a serem adicionados
+        formato: "json", "csv" ou "auto" para detecção automática
+    """
+    dados_convertidos = drive.dados_para_lista(dados, formato)
+    return drive.adicionar_celulas(planilha_id, nome_aba, dados_convertidos)
+
 from fastapi.openapi.utils import get_openapi
 
 def custom_openapi():
@@ -250,7 +425,7 @@ def custom_openapi():
     openapi_schema = get_openapi(
         title="Analytics Agent API",
         version="1.0.0",
-        description="API que interpreta perguntas em linguagem natural para gerar análises com GA4, Search Console e YouTube",
+        description="API que interpreta perguntas em linguagem natural para gerar análises com GA4, Search Console, YouTube e Google Drive/Sheets",
         routes=app.routes,
     )
     openapi_schema["servers"] = [
