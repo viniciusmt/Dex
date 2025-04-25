@@ -78,14 +78,33 @@ def consulta_ga4(
         # Mapeia condição textual para enums do GA4
         condicoes = {
             "igual": GAFilter.StringFilter.MatchType.EXACT,
-            "contém": GAFilter.StringFilter.MatchType.CONTAINS,
+            "contem": GAFilter.StringFilter.MatchType.CONTAINS,  # Corrigido de "contém" para "contem"
             "começa com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
             "termina com": GAFilter.StringFilter.MatchType.ENDS_WITH,
             "regex": GAFilter.StringFilter.MatchType.PARTIAL_REGEXP,
             "regex completa": GAFilter.StringFilter.MatchType.FULL_REGEXP,
         }
 
+        # Adiciona variantes sem acentos e em maiúsculas para melhorar a robustez
+        condicoes_extras = {
+            "contém": GAFilter.StringFilter.MatchType.CONTAINS,
+            "comeca com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "comeca_com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "termina_com": GAFilter.StringFilter.MatchType.ENDS_WITH,
+            "contains": GAFilter.StringFilter.MatchType.CONTAINS,
+            "begins_with": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "ends_with": GAFilter.StringFilter.MatchType.ENDS_WITH,
+            "exact": GAFilter.StringFilter.MatchType.EXACT,
+            "regexp": GAFilter.StringFilter.MatchType.PARTIAL_REGEXP,
+            "full_regexp": GAFilter.StringFilter.MatchType.FULL_REGEXP,
+        }
+        
+        # Mescla os dicionários
+        condicoes.update(condicoes_extras)
+
+        print(f"DIAGNÓSTICO: Condição de filtro usada: '{filtro_condicao.lower()}'", file=sys.stderr)
         match_type = condicoes.get(filtro_condicao.lower(), GAFilter.StringFilter.MatchType.EXACT)
+        print(f"DIAGNÓSTICO: Match type selecionado: {match_type}", file=sys.stderr)
 
         # Monta filtro se informado
         dimension_filter = None
@@ -159,14 +178,33 @@ def consulta_ga4_pivot(
         # Mapeia condição textual para enums do GA4
         condicoes = {
             "igual": GAFilter.StringFilter.MatchType.EXACT,
-            "contém": GAFilter.StringFilter.MatchType.CONTAINS,
+            "contem": GAFilter.StringFilter.MatchType.CONTAINS,  # Corrigido de "contém" para "contem"
             "começa com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
             "termina com": GAFilter.StringFilter.MatchType.ENDS_WITH,
             "regex": GAFilter.StringFilter.MatchType.PARTIAL_REGEXP,
             "regex completa": GAFilter.StringFilter.MatchType.FULL_REGEXP,
         }
 
+        # Adiciona variantes sem acentos e em maiúsculas para melhorar a robustez
+        condicoes_extras = {
+            "contém": GAFilter.StringFilter.MatchType.CONTAINS,
+            "comeca com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "comeca_com": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "termina_com": GAFilter.StringFilter.MatchType.ENDS_WITH,
+            "contains": GAFilter.StringFilter.MatchType.CONTAINS,
+            "begins_with": GAFilter.StringFilter.MatchType.BEGINS_WITH,
+            "ends_with": GAFilter.StringFilter.MatchType.ENDS_WITH,
+            "exact": GAFilter.StringFilter.MatchType.EXACT,
+            "regexp": GAFilter.StringFilter.MatchType.PARTIAL_REGEXP,
+            "full_regexp": GAFilter.StringFilter.MatchType.FULL_REGEXP,
+        }
+        
+        # Mescla os dicionários
+        condicoes.update(condicoes_extras)
+
+        print(f"DIAGNÓSTICO: Condição de filtro usada (pivot): '{filtro_condicao.lower()}'", file=sys.stderr)
         match_type = condicoes.get(filtro_condicao.lower(), GAFilter.StringFilter.MatchType.EXACT)
+        print(f"DIAGNÓSTICO: Match type selecionado (pivot): {match_type}", file=sys.stderr)
 
         # Monta filtro se informado
         dimension_filter = None
