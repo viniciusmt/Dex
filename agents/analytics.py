@@ -51,7 +51,89 @@ def init_analytics_client():
 
 # Inicializa o cliente GA4
 client = init_analytics_client()
-property_id = "properties/254018746"
+
+def listar_contas_ga4():
+    """
+    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
+    
+    Returns:
+        dict: Informações sobre contas e propriedades
+    """
+    try:
+        from google.analytics.admin_v1alpha import AnalyticsAdminServiceClient
+        from google.analytics.admin_v1alpha.types import ListPropertiesRequest
+        
+        # Verifica se o cliente está inicializado
+        if client is None:
+            return {"erro": "Cliente GA4 não inicializado corretamente. Verifique as credenciais."}
+            
+        # Lê credenciais do JSON como string (vinda de variável de ambiente)
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if not creds_json:
+            return {"erro": "Variável GOOGLE_CREDENTIALS não encontrada"}
+            
+        # Tenta analisar o JSON
+        try:
+            creds_dict = json.loads(creds_json)
+        except json.JSONDecodeError as e:
+            return {"erro": f"Falha ao analisar JSON das credenciais: {e}"}
+            
+        # Cria as credenciais
+        try:
+            credentials = service_account.Credentials.from_service_account_info(
+                creds_dict, 
+                scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+            )
+        except Exception as e:
+            return {"erro": f"Falha ao criar credenciais: {e}"}
+        
+        # Inicializa o cliente Admin
+        try:
+            admin_client = AnalyticsAdminServiceClient(credentials=credentials)
+            
+            # Lista todas as contas
+            accounts = admin_client.list_accounts()
+            
+            resultado = {
+                "sucesso": True,
+                "mensagem": "Contas e propriedades listadas com sucesso",
+                "contas": []
+            }
+            
+            for account in accounts:
+                conta_info = {
+                    "id_conta": account.name,
+                    "nome_conta": account.display_name,
+                    "propriedades": []
+                }
+                
+                try:
+                    # Lista propriedades dessa conta
+                    request = ListPropertiesRequest(filter=f"parent:{account.name}")
+                    properties = admin_client.list_properties(request=request)
+                    
+                    for prop in properties:
+                        conta_info["propriedades"].append({
+                            "id_propriedade": prop.name,
+                            "nome_propriedade": prop.display_name,
+                            # O formato que as funções existentes esperam 
+                            "property_id": prop.name  
+                        })
+                except Exception as e:
+                    print(f"Erro ao listar propriedades da conta {account.name}: {str(e)}", file=sys.stderr)
+                    conta_info["erro_propriedades"] = str(e)
+                
+                resultado["contas"].append(conta_info)
+            
+            return resultado
+        except Exception as e:
+            return {"erro": f"Erro ao acessar o serviço de Admin do GA4: {str(e)}"}
+            
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Erro ao listar contas GA4: {str(e)}\n{error_details}", file=sys.stderr)
+        return {"erro": f"Erro ao listar contas GA4: {str(e)}"}
 
 def consulta_ga4(
     dimensao: str = "country",
@@ -59,7 +141,8 @@ def consulta_ga4(
     periodo: str = "7daysAgo",
     filtro_campo: str = "",
     filtro_valor: str = "",
-    filtro_condicao: str = "igual"
+    filtro_condicao: str = "igual",
+    property_id: str = "properties/254018746"
 ) -> str:
     """
     Consulta sessões segmentadas por dimensões no GA4.
@@ -71,6 +154,10 @@ def consulta_ga4(
 
         print(f"DIAGNÓSTICO: Iniciando consulta GA4 - dimensão: {dimensao}, métrica: {metrica}", file=sys.stderr)
         
+        # Garante formato correto do property_id
+        if not property_id.startswith("properties/"):
+            property_id = f"properties/{property_id}"
+            
         # Prepara dimensões e métricas
         lista_dimensoes = [Dimension(name=d.strip()) for d in dimensao.split(",")]
         lista_metricas = [Metric(name=m.strip()) for m in metrica.split(",")]
@@ -151,7 +238,6 @@ def consulta_ga4(
         print(f"ERRO na consulta GA4: {e}", file=sys.stderr)
         return f"[Erro] Consulta GA4 falhou: {e}"
 
-# O restante do código permanece igual
 def consulta_ga4_pivot(
     dimensao: str = "country",
     dimensao_pivot: str = "deviceCategory",
@@ -160,12 +246,17 @@ def consulta_ga4_pivot(
     filtro_campo: str = "",
     filtro_valor: str = "",
     filtro_condicao: str = "igual",
-    limite_linhas: int = 30
+    limite_linhas: int = 30,
+    property_id: str = "properties/254018746"
 ) -> str:
     try:
         # Verifica se o cliente está inicializado
         if client is None:
             return "Erro: Cliente GA4 não inicializado corretamente. Verifique as credenciais."
+            
+        # Garante formato correto do property_id
+        if not property_id.startswith("properties/"):
+            property_id = f"properties/{property_id}"
             
         # Lista de todas as dimensões (tanto primária como de pivot)
         todas_dimensoes = [Dimension(name=d.strip()) for d in dimensao.split(",")]
