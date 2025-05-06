@@ -747,7 +747,7 @@ def trello_listar_tarefas_quadro(board_id: str) -> dict:
 
 
 @app.get("/openapi.json")
-def get_openapi():
+def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -758,7 +758,7 @@ def get_openapi():
         routes=app.routes,
     )
 
-    # ✅ Adiciona o campo `servers` corretamente
+    # ✅ Inclui campo servers corretamente
     openapi_schema["servers"] = [
         {
             "url": "https://dex-mcp-server-1212.onrender.com",
@@ -768,7 +768,7 @@ def get_openapi():
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
-
+    
 # Tenta integrar o router do MCP, se disponível
 try:
     if hasattr(mcp, 'router'):
