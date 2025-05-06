@@ -748,22 +748,24 @@ def trello_listar_tarefas_quadro(board_id: str) -> dict:
 
 @app.get("/openapi.json")
 def get_openapi():
-    """Personaliza a descrição OpenAPI."""
     if app.openapi_schema:
         return app.openapi_schema
-        
+
     openapi_schema = get_openapi(
         title="Analytics Agent API",
         version="1.0.0",
         description="API para consultas em Analytics (GA4), Search Console, YouTube, Drive e Trello",
         routes=app.routes,
     )
-    
-    # Adiciona informações sobre o servidor
+
+    # ✅ Adiciona o campo `servers` corretamente
     openapi_schema["servers"] = [
-        {"url": "https://analytics-claude-mcp.onrender.com", "description": "Servidor Render"}
+        {
+            "url": "https://dex-mcp-server-1212.onrender.com",
+            "description": "Servidor principal Render"
+        }
     ]
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
