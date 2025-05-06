@@ -2,10 +2,6 @@ from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mcp.server.fastmcp import FastMCP
-from agents import analytics
-import agents.search_console as search_console
-import agents.youtube as youtube
-import agents.drive as drive  # Importa o novo módulo de drive
 import os
 import uvicorn
 import sys
@@ -16,6 +12,25 @@ from typing import Dict, Any, Optional, List, Literal
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Configuração de caminho
+current_dir = os.path.dirname(os.path.abspath(__file__))
+agents_dir = os.path.join(current_dir, "agents")
+if agents_dir not in sys.path:
+    sys.path.append(agents_dir)
+print(f"Adicionado ao sys.path: {agents_dir}", file=sys.stderr)
+
+# Importação dos módulos
+try:
+    from agents import analytics
+    from agents import search_console
+    from agents import youtube
+    from agents import drive
+    from agents import trello
+except ImportError as e:
+    print(f"Erro ao importar módulos: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc(file=sys.stderr)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 if not ANTHROPIC_API_KEY:
@@ -53,6 +68,10 @@ class GA4Query(BaseModel):
         default="igual",
         description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
     )
+    property_id: str = Field(
+        default="properties/254018746",
+        description="ID da propriedade GA4 no formato 'properties/XXXXXX'"
+    )
 
 class GA4PivotQuery(BaseModel):
     dimensao: str = "country"
@@ -65,7 +84,11 @@ class GA4PivotQuery(BaseModel):
         default="igual",
         description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
     )
-    limite_linhas: int = 100
+    limite_linhas: int = 30
+    property_id: str = Field(
+        default="properties/254018746",
+        description="ID da propriedade GA4 no formato 'properties/XXXXXX'"
+    )
 
 class SearchConsoleQuery(BaseModel):
     data_inicio: str = "30daysAgo"
@@ -78,31 +101,50 @@ class SearchConsoleQuery(BaseModel):
 class YouTubeQuery(BaseModel):
     pergunta: str
 
-# Novas classes para as operações de Drive/Sheets
+# Classes para as operações de Drive/Sheets
 class CriarPlanilhaRequest(BaseModel):
-    nome_planilha: str
-    email_compartilhamento: str = "vinicius.matsumoto@fgv.br"
+    titulo: str
+    dados_iniciais: Optional[List[List[Any]]] = None
 
 class ListarPlanilhasRequest(BaseModel):
-    limite: int = 20
+    pass
 
 class CriarAbaRequest(BaseModel):
     planilha_id: str
     nome_aba: str
-    linhas: int = 100
-    colunas: int = 20
 
-class SobrescreverAbaRequest(BaseModel):
+class SobrescreverSheetRequest(BaseModel):
     planilha_id: str
     nome_aba: str
-    dados: str
-    formato: str = "auto"  # "json", "csv" ou "auto"
+    dados: List[List[Any]]
 
 class AdicionarCelulasRequest(BaseModel):
     planilha_id: str
     nome_aba: str
-    dados: str
-    formato: str = "auto"  # "json", "csv" ou "auto"
+    dados: List[List[Any]]
+    inicio: str = "A1"
+
+# Classes para operações do Trello
+class TrelloListarQuadrosRequest(BaseModel):
+    pass
+
+class TrelloListarListasRequest(BaseModel):
+    board_id: str
+
+class TrelloListarCartoesRequest(BaseModel):
+    list_id: str
+
+class TrelloCriarCartaoRequest(BaseModel):
+    list_id: str
+    nome: str
+    descricao: str = ""
+
+class TrelloMoverCartaoRequest(BaseModel):
+    card_id: str
+    list_id: str
+
+class TrelloListarTarefasQuadroRequest(BaseModel):
+    board_id: str
 
 @app.post("/perguntar")
 async def perguntar(query: NaturalLanguageQuery):
@@ -122,7 +164,7 @@ Pergunta: {query.pergunta}
 Retorne um JSON neste formato:
 
 {{
-  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas",
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
   "parametros": {{}}
 }}
 
@@ -161,35 +203,32 @@ Apenas o JSON. Nenhuma explicação.
             resultado = search_console.consulta_search_console_custom(**parametros)
         elif tipo_consulta == "youtube":
             resultado = youtube.youtube_analyzer(parametros.get("pergunta", query.pergunta))
-        # Novas operações de Drive
+        elif tipo_consulta == "listar_contas_ga4":
+            resultado = analytics.listar_contas_ga4()
+        # Operações de Drive
         elif tipo_consulta == "drive_criar_planilha":
             resultado = drive.criar_planilha(**parametros)
         elif tipo_consulta == "drive_listar_planilhas":
-            resultado = drive.listar_planilhas(**parametros)
+            resultado = drive.listar_planilhas()
         elif tipo_consulta == "drive_criar_aba":
             resultado = drive.criar_nova_aba(**parametros)
         elif tipo_consulta == "drive_sobrescrever_aba":
-            # Converter os dados para o formato esperado pelo Google Sheets
-            if "dados" in parametros and "formato" in parametros:
-                dados_convertidos = drive.dados_para_lista(
-                    parametros["dados"],
-                    parametros["formato"]
-                )
-                parametros["dados"] = dados_convertidos
-                # Remove o parâmetro formato que não é usado pela função sobrescrever_aba
-                parametros.pop("formato", None)
             resultado = drive.sobrescrever_aba(**parametros)
         elif tipo_consulta == "drive_adicionar_celulas":
-            # Converter os dados para o formato esperado pelo Google Sheets
-            if "dados" in parametros and "formato" in parametros:
-                dados_convertidos = drive.dados_para_lista(
-                    parametros["dados"],
-                    parametros["formato"]
-                )
-                parametros["dados"] = dados_convertidos
-                # Remove o parâmetro formato que não é usado pela função adicionar_celulas
-                parametros.pop("formato", None)
             resultado = drive.adicionar_celulas(**parametros)
+        # Operações do Trello
+        elif tipo_consulta == "trello_listar_quadros":
+            resultado = trello.listar_quadros()
+        elif tipo_consulta == "trello_listar_listas":
+            resultado = trello.listar_listas(**parametros)
+        elif tipo_consulta == "trello_listar_cartoes":
+            resultado = trello.listar_cartoes(**parametros)
+        elif tipo_consulta == "trello_criar_cartao":
+            resultado = trello.criar_cartao(**parametros)
+        elif tipo_consulta == "trello_mover_cartao":
+            resultado = trello.mover_cartao(**parametros)
+        elif tipo_consulta == "trello_listar_tarefas_quadro":
+            resultado = trello.listar_tarefas_quadro(**parametros)
         else:
             raise HTTPException(status_code=400, detail="Tipo de consulta não reconhecido")
 
@@ -212,6 +251,14 @@ Apenas o JSON. Nenhuma explicação.
     except Exception as e:
         print(f"[Erro geral] {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro ao processar pergunta: {str(e)}")
+
+@app.get("/listar-contas-ga4")
+async def api_listar_contas_ga4():
+    try:
+        result = analytics.listar_contas_ga4()
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/consulta_ga4")
 async def api_consulta_ga4(query: GA4Query):
@@ -255,7 +302,7 @@ async def api_analise_youtube(query: YouTubeQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Novos endpoints para as operações de Drive/Sheets
+# Endpoints para as operações de Drive/Sheets
 @app.post("/api/drive/criar_planilha")
 async def api_criar_planilha(query: CriarPlanilhaRequest):
     try:
@@ -264,10 +311,10 @@ async def api_criar_planilha(query: CriarPlanilhaRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/drive/listar_planilhas")
-async def api_listar_planilhas(query: ListarPlanilhasRequest):
+@app.get("/api/drive/listar_planilhas")
+async def api_listar_planilhas():
     try:
-        result = drive.listar_planilhas(**query.dict())
+        result = drive.listar_planilhas()
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -280,17 +327,10 @@ async def api_criar_aba(query: CriarAbaRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/drive/sobrescrever_aba")
-async def api_sobrescrever_aba(query: SobrescreverAbaRequest):
+@app.post("/api/drive/sobrescrever_sheet")
+async def api_sobrescrever_sheet(query: SobrescreverSheetRequest):
     try:
-        # Converte os dados para o formato esperado pelo Google Sheets
-        dados_convertidos = drive.dados_para_lista(query.dados, query.formato)
-        # Atualiza o objeto de consulta
-        query_dict = query.dict()
-        query_dict["dados"] = dados_convertidos
-        query_dict.pop("formato")  # Remove o campo formato que não é usado pela função
-        
-        result = drive.sobrescrever_aba(**query_dict)
+        result = drive.sobrescrever_aba(**query.dict())
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -298,14 +338,56 @@ async def api_sobrescrever_aba(query: SobrescreverAbaRequest):
 @app.post("/api/drive/adicionar_celulas")
 async def api_adicionar_celulas(query: AdicionarCelulasRequest):
     try:
-        # Converte os dados para o formato esperado pelo Google Sheets
-        dados_convertidos = drive.dados_para_lista(query.dados, query.formato)
-        # Atualiza o objeto de consulta
-        query_dict = query.dict()
-        query_dict["dados"] = dados_convertidos
-        query_dict.pop("formato")  # Remove o campo formato que não é usado pela função
-        
-        result = drive.adicionar_celulas(**query_dict)
+        result = drive.adicionar_celulas(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoints para operações do Trello
+@app.get("/api/trello/listar_quadros")
+async def api_trello_listar_quadros():
+    try:
+        result = trello.listar_quadros()
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trello/listar_listas")
+async def api_trello_listar_listas(query: TrelloListarListasRequest):
+    try:
+        result = trello.listar_listas(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trello/listar_cartoes")
+async def api_trello_listar_cartoes(query: TrelloListarCartoesRequest):
+    try:
+        result = trello.listar_cartoes(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trello/criar_cartao")
+async def api_trello_criar_cartao(query: TrelloCriarCartaoRequest):
+    try:
+        result = trello.criar_cartao(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trello/mover_cartao")
+async def api_trello_mover_cartao(query: TrelloMoverCartaoRequest):
+    try:
+        result = trello.mover_cartao(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/trello/listar_tarefas_quadro")
+async def api_trello_listar_tarefas_quadro(query: TrelloListarTarefasQuadroRequest):
+    try:
+        result = trello.listar_tarefas_quadro(**query.dict())
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -328,118 +410,362 @@ async def test_filter_conditions():
         "nota": "Use 'contem' (sem acento) para consultas que contêm um valor parcial."
     }
 
+@app.get("/debug/credentials")
+async def debug_credentials():
+    """
+    Endpoint para depurar problemas de credenciais.
+    Não mostra as credenciais completas, apenas informações de diagnóstico.
+    """
+    try:
+        # Verifica se GOOGLE_CREDENTIALS existe
+        google_creds = os.getenv("GOOGLE_CREDENTIALS")
+        has_google_creds = google_creds is not None
+
+        # Tenta analisar o JSON
+        json_valid = False
+        creds_info = {}
+        if has_google_creds:
+            try:
+                creds_dict = json.loads(google_creds)
+                json_valid = True
+                
+                # Extrai informações de diagnóstico (sem revelar dados sensíveis)
+                if "type" in creds_dict:
+                    creds_info["type"] = creds_dict["type"]
+                if "project_id" in creds_dict:
+                    creds_info["project_id"] = creds_dict["project_id"]
+                if "client_email" in creds_dict:
+                    creds_info["client_email"] = creds_dict["client_email"]
+                if "private_key_id" in creds_dict:
+                    creds_info["has_private_key_id"] = True
+                if "private_key" in creds_dict:
+                    creds_info["has_private_key"] = len(creds_dict["private_key"]) > 100
+            except json.JSONDecodeError:
+                json_valid = False
+        
+        # Verifica se YOUTUBE_API_KEY existe
+        youtube_key = os.getenv("YOUTUBE_API_KEY")
+        has_youtube_key = youtube_key is not None
+        
+        # Verifica se ANTHROPIC_API_KEY existe
+        claude_key = os.getenv("ANTHROPIC_API_KEY")
+        has_claude_key = claude_key is not None
+
+        # Verifica se TRELLO_API_KEY existe
+        trello_key = os.getenv("TRELLO_API_KEY")
+        has_trello_key = trello_key is not None
+
+        # Verifica se TRELLO_TOKEN existe
+        trello_token = os.getenv("TRELLO_TOKEN")
+        has_trello_token = trello_token is not None
+
+        # Retorna as informações de diagnóstico
+        return {
+            "environment": {
+                "has_google_credentials": has_google_creds,
+                "google_credentials_valid_json": json_valid,
+                "google_credentials_info": creds_info,
+                "has_youtube_api_key": has_youtube_key,
+                "has_anthropic_api_key": has_claude_key,
+                "has_trello_api_key": has_trello_key,
+                "has_trello_token": has_trello_token
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+# Registrando as ferramentas MCP
 @mcp.tool()
-def consulta_ga4(**kwargs) -> str:
+def listar_contas_ga4() -> dict:
+    """
+    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
+    
+    Returns:
+        dict: Informações sobre contas e propriedades
+    """
+    return analytics.listar_contas_ga4()
+
+@mcp.tool()
+def consulta_ga4(
+    dimensao: str = "country",
+    metrica: str = "sessions",
+    periodo: str = "7daysAgo",
+    filtro_campo: str = "",
+    filtro_valor: str = "",
+    filtro_condicao: str = "igual",
+    property_id: str = "properties/254018746"
+) -> str:
+    """
+    Consulta sessões segmentadas por dimensões no GA4.
+    
+    Args:
+        dimensao: Dimensões para análise, separadas por vírgula
+        metrica: Métricas para análise, separadas por vírgula
+        periodo: Data inicial (ex: "7daysAgo", "2023-01-01")
+        filtro_campo: Campo para filtragem
+        filtro_valor: Valor para filtragem
+        filtro_condicao: Condição de filtragem (igual, contém, etc.)
+        property_id: ID da propriedade GA4 no formato "properties/XXXXXX"
+    """
     # Garantir que "contem" esteja no formato correto
-    if "filtro_condicao" in kwargs and kwargs["filtro_condicao"] in ["contém", "contains", "contém"]:
-        kwargs["filtro_condicao"] = "contem"
+    if filtro_condicao in ["contém", "contains", "contém"]:
+        filtro_condicao = "contem"
         print(f"DIAGNÓSTICO MCP: Convertendo condição de filtro para 'contem'", file=sys.stderr)
     
-    return analytics.consulta_ga4(**kwargs)
+    return analytics.consulta_ga4(
+        dimensao, metrica, periodo,
+        filtro_campo, filtro_valor, filtro_condicao, property_id
+    )
 
 @mcp.tool()
-def consulta_ga4_pivot(**kwargs) -> str:
+def consulta_ga4_pivot(
+    dimensao: str = "country",
+    dimensao_pivot: str = "deviceCategory",
+    metrica: str = "sessions",
+    periodo: str = "7daysAgo",
+    filtro_campo: str = "",
+    filtro_valor: str = "",
+    filtro_condicao: str = "igual",
+    limite_linhas: int = 30,
+    property_id: str = "properties/254018746"
+) -> str:
+    """
+    Consulta pivot no GA4 com múltiplas dimensões cruzadas.
+    
+    Args:
+        dimensao: Dimensões para análise, separadas por vírgula
+        dimensao_pivot: Dimensões para pivot, separadas por vírgula
+        metrica: Métricas para análise, separadas por vírgula
+        periodo: Data inicial (ex: "7daysAgo", "2023-01-01")
+        filtro_campo: Campo para filtragem
+        filtro_valor: Valor para filtragem
+        filtro_condicao: Condição de filtragem (igual, contém, etc.)
+        limite_linhas: Limite de linhas retornadas
+        property_id: ID da propriedade GA4 no formato "properties/XXXXXX"
+    """
     # Garantir que "contem" esteja no formato correto
-    if "filtro_condicao" in kwargs and kwargs["filtro_condicao"] in ["contém", "contains", "contém"]:
-        kwargs["filtro_condicao"] = "contem"
+    if filtro_condicao in ["contém", "contains", "contém"]:
+        filtro_condicao = "contem"
         print(f"DIAGNÓSTICO MCP PIVOT: Convertendo condição de filtro para 'contem'", file=sys.stderr)
     
-    return analytics.consulta_ga4_pivot(**kwargs)
+    return analytics.consulta_ga4_pivot(
+        dimensao, dimensao_pivot, metrica, periodo,
+        filtro_campo, filtro_valor, filtro_condicao, limite_linhas, property_id
+    )
 
 @mcp.tool()
-def consulta_search_console_custom(**kwargs) -> dict:
-    return search_console.consulta_search_console_custom(**kwargs)
+def consulta_search_console_custom(
+    data_inicio: str = "30daysAgo",
+    data_fim: str = "today",
+    dimensoes: list[str] = ["query"],
+    metrica_extra: bool = True,
+    filtros: list[dict] = None,
+    limite: int = 20
+) -> dict:
+    """
+    Consulta customizada ao Search Console com suporte a múltiplas dimensões e filtros.
+    
+    Args:
+        data_inicio: "30daysAgo", "today" ou "YYYY-MM-DD"
+        data_fim: "today" ou "YYYY-MM-DD"
+        dimensoes: lista de dimensões como "query", "date", "page", "country"
+        metrica_extra: inclui todas as métricas padrão (clicks, impressions, ctr, position)
+        filtros: lista de filtros no formato {"dimension": "query", "operator": "contains", "expression": "mba"}
+        limite: número máximo de linhas
+    """
+    return search_console.consulta_search_console_custom(
+        data_inicio, data_fim, dimensoes, metrica_extra, filtros, limite
+    )
 
 @mcp.tool()
 def analise_youtube(pergunta: str) -> dict:
+    """
+    Analisa comentários e tendências do YouTube sobre um determinado assunto.
+    
+    Args:
+        pergunta: Pergunta ou tema para análise (ex: "o que estão falando sobre MBA no YouTube")
+    """
     return youtube.youtube_analyzer(pergunta)
 
-# Registrando as novas ferramentas MCP para o Google Drive/Sheets
+# Ferramentas para Google Drive e Sheets
 @mcp.tool()
-def drive_criar_planilha(nome_planilha: str, email_compartilhamento: str = "vinicius.matsumoto@fgv.br") -> dict:
+def criar_planilha(
+    titulo: str,
+    dados_iniciais: list = None
+) -> dict:
     """
-    Cria uma nova planilha no Google Drive e a compartilha com o email especificado.
+    Cria uma nova planilha no Google Drive e a compartilha com vinicius.matsumoto@fgv.br
     
     Args:
-        nome_planilha: Nome da nova planilha
-        email_compartilhamento: Email com quem compartilhar (padrão: vinicius.matsumoto@fgv.br)
+        titulo: Nome da planilha a ser criada
+        dados_iniciais: Lista opcional de dados para adicionar inicialmente (lista de listas)
     """
-    return drive.criar_planilha(nome_planilha, email_compartilhamento)
+    return drive.criar_planilha(titulo, dados_iniciais)
 
 @mcp.tool()
-def drive_listar_planilhas(limite: int = 20) -> dict:
+def listar_planilhas() -> dict:
     """
-    Lista todas as planilhas às quais a conta de serviço tem acesso.
-    
-    Args:
-        limite: Número máximo de planilhas a listar
+    Lista todas as planilhas que a conta de serviço tem acesso.
     """
-    return drive.listar_planilhas(limite)
+    return drive.listar_planilhas()
 
 @mcp.tool()
-def drive_criar_aba(planilha_id: str, nome_aba: str, linhas: int = 100, colunas: int = 20) -> dict:
+def criar_aba(
+    planilha_id: str,
+    nome_aba: str
+) -> dict:
     """
     Cria uma nova aba em uma planilha existente.
     
     Args:
-        planilha_id: ID da planilha no Google Drive
+        planilha_id: ID da planilha
         nome_aba: Nome da nova aba
-        linhas: Número de linhas na nova aba
-        colunas: Número de colunas na nova aba
     """
-    return drive.criar_nova_aba(planilha_id, nome_aba, linhas, colunas)
+    return drive.criar_nova_aba(planilha_id, nome_aba)
 
 @mcp.tool()
-def drive_sobrescrever_aba(planilha_id: str, nome_aba: str, dados: str, formato: str = "auto") -> dict:
+def sobrescrever_sheet(
+    planilha_id: str,
+    nome_aba: str,
+    dados: list
+) -> dict:
     """
-    Sobrescreve completamente o conteúdo de uma aba existente.
+    Sobrescreve os dados de uma aba específica.
     
     Args:
-        planilha_id: ID da planilha no Google Drive
+        planilha_id: ID da planilha
         nome_aba: Nome da aba a ser sobrescrita
-        dados: String JSON ou CSV com os dados a serem escritos
-        formato: "json", "csv" ou "auto" para detecção automática
+        dados: Lista de dados (lista de listas)
     """
-    dados_convertidos = drive.dados_para_lista(dados, formato)
-    return drive.sobrescrever_aba(planilha_id, nome_aba, dados_convertidos)
+    return drive.sobrescrever_aba(planilha_id, nome_aba, dados)
 
 @mcp.tool()
-def drive_adicionar_celulas(planilha_id: str, nome_aba: str, dados: str, formato: str = "auto") -> dict:
+def adicionar_celulas(
+    planilha_id: str,
+    nome_aba: str,
+    dados: list,
+    inicio: str = "A1"
+) -> dict:
     """
-    Adiciona dados a uma aba existente, sem sobrescrever dados existentes.
+    Adiciona dados em células específicas sem sobrescrever outras áreas.
     
     Args:
-        planilha_id: ID da planilha no Google Drive
-        nome_aba: Nome da aba onde adicionar dados
-        dados: String JSON ou CSV com os dados a serem adicionados
-        formato: "json", "csv" ou "auto" para detecção automática
+        planilha_id: ID da planilha
+        nome_aba: Nome da aba
+        dados: Lista de dados (lista de listas)
+        inicio: Célula inicial (ex: "A1")
     """
-    dados_convertidos = drive.dados_para_lista(dados, formato)
-    return drive.adicionar_celulas(planilha_id, nome_aba, dados_convertidos)
+    return drive.adicionar_celulas(planilha_id, nome_aba, dados, inicio)
 
-from fastapi.openapi.utils import get_openapi
+# Funções do Trello
+@mcp.tool()
+def trello_listar_quadros() -> dict:
+    """
+    Lista todos os quadros do Trello do usuário.
+    
+    Returns:
+        dict: Informações sobre quadros disponíveis
+    """
+    return trello.listar_quadros()
 
-def custom_openapi():
+@mcp.tool()
+def trello_listar_listas(board_id: str) -> dict:
+    """
+    Lista todas as listas (colunas) de um quadro do Trello.
+    
+    Args:
+        board_id: ID do quadro do Trello
+        
+    Returns:
+        dict: Informações sobre as listas do quadro
+    """
+    return trello.listar_listas(board_id)
+
+@mcp.tool()
+def trello_listar_cartoes(list_id: str) -> dict:
+    """
+    Lista todos os cartões (tarefas) de uma lista do Trello.
+    
+    Args:
+        list_id: ID da lista do Trello
+        
+    Returns:
+        dict: Informações sobre os cartões da lista
+    """
+    return trello.listar_cartoes(list_id)
+
+@mcp.tool()
+def trello_criar_cartao(
+    list_id: str,
+    nome: str,
+    descricao: str = ""
+) -> dict:
+    """
+    Cria um novo cartão (tarefa) em uma lista do Trello.
+    
+    Args:
+        list_id: ID da lista onde o cartão será criado
+        nome: Nome do cartão/tarefa
+        descricao: Descrição do cartão (opcional)
+        
+    Returns:
+        dict: Informações sobre o cartão criado
+    """
+    return trello.criar_cartao(list_id, nome, descricao)
+
+@mcp.tool()
+def trello_mover_cartao(
+    card_id: str,
+    list_id: str
+) -> dict:
+    """
+    Move um cartão (tarefa) para outra lista no Trello.
+    
+    Args:
+        card_id: ID do cartão a ser movido
+        list_id: ID da lista de destino
+        
+    Returns:
+        dict: Informações sobre o resultado da operação
+    """
+    return trello.mover_cartao(card_id, list_id)
+
+@mcp.tool()
+def trello_listar_tarefas_quadro(board_id: str) -> dict:
+    """
+    Lista todas as tarefas de um quadro do Trello organizadas por lista.
+    
+    Args:
+        board_id: ID do quadro do Trello
+        
+    Returns:
+        dict: Todas as tarefas organizadas por lista
+    """
+    return trello.listar_tarefas_quadro(board_id)
+
+
+@app.get("/openapi.json")
+def get_openapi():
+    """Personaliza a descrição OpenAPI."""
     if app.openapi_schema:
         return app.openapi_schema
+        
     openapi_schema = get_openapi(
         title="Analytics Agent API",
         version="1.0.0",
-        description="API que interpreta perguntas em linguagem natural para gerar análises com GA4, Search Console, YouTube e Google Drive/Sheets",
+        description="API para consultas em Analytics (GA4), Search Console, YouTube, Drive e Trello",
         routes=app.routes,
     )
+    
+    # Adiciona informações sobre o servidor
     openapi_schema["servers"] = [
-        {"url": "https://dex-mcp-server-1212.onrender.com"}
+        {"url": "https://analytics-claude-mcp.onrender.com", "description": "Servidor Render"}
     ]
+    
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
-app.openapi = custom_openapi
-
-@app.get("/.well-known/openapi.json")
-def openapi_schema():
-    return app.openapi()
-
+# Tenta integrar o router do MCP, se disponível
 try:
     if hasattr(mcp, 'router'):
         app.include_router(mcp.router, prefix="/mcp")
