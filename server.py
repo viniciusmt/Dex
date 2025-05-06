@@ -475,31 +475,8 @@ async def debug_credentials():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/openapi.json")
-def get_openapi():
+def get_custom_openapi():
     """Personaliza a descrição OpenAPI."""
-    if app.openapi_schema:
-        return app.openapi_schema
-        
-    openapi_schema = get_openapi(
-        title="Analytics Agent API",
-        version="1.0.0",
-        description="API para consultas em Analytics (GA4), Search Console, YouTube, Drive e Trello",
-        routes=app.routes,
-    )
-    
-    # Adiciona informações sobre o servidor
-    openapi_schema["servers"] = [
-        {"url": "https://analytics-claude-mcp.onrender.com", "description": "Servidor Render"}
-    ]
-    
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-# Rota adicional para compatibilidade com MCP
-@app.get("/.well-known/openapi.json")
-def mcp_openapi():
-    """Rota para a especificação OpenAPI no formato exigido pelo MCP."""
     if app.openapi_schema:
         return app.openapi_schema
         
@@ -515,8 +492,22 @@ def mcp_openapi():
         {"url": "https://dex-mcp-server-1212.onrender.com", "description": "Servidor Render"}
     ]
     
-    # Importante: NÃO atribuir ao app.openapi_schema para evitar conflitos
-    return openapi_schema
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+@app.get("/openapi.json")
+def custom_openapi_route():
+    """Rota para a especificação OpenAPI personalizada."""
+    return get_custom_openapi()
+
+# Rota adicional para compatibilidade com MCP
+@app.get("/.well-known/openapi.json")
+def mcp_openapi():
+    """Rota para a especificação OpenAPI no formato exigido pelo MCP."""
+    return get_custom_openapi()
+
+# Sobrescreve a função openapi padrão do FastAPI
+app.openapi = get_custom_openapi
 
 # Tenta integrar o router do MCP, se disponível
 try:
