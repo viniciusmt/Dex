@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional, List, Literal
 from dotenv import load_dotenv
 from fastapi.openapi.utils import get_openapi
 
-
 load_dotenv()
 
 # Configuração de caminho
@@ -476,299 +475,33 @@ async def debug_credentials():
     except Exception as e:
         return {"error": str(e)}
 
-# Registrando as ferramentas MCP
-@mcp.tool()
-def listar_contas_ga4() -> dict:
-    """
-    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
-    
-    Returns:
-        dict: Informações sobre contas e propriedades
-    """
-    return analytics.listar_contas_ga4()
-
-@mcp.tool()
-def consulta_ga4(
-    dimensao: str = "country",
-    metrica: str = "sessions",
-    periodo: str = "7daysAgo",
-    filtro_campo: str = "",
-    filtro_valor: str = "",
-    filtro_condicao: str = "igual",
-    property_id: str = "properties/254018746"
-) -> str:
-    """
-    Consulta sessões segmentadas por dimensões no GA4.
-    
-    Args:
-        dimensao: Dimensões para análise, separadas por vírgula
-        metrica: Métricas para análise, separadas por vírgula
-        periodo: Data inicial (ex: "7daysAgo", "2023-01-01")
-        filtro_campo: Campo para filtragem
-        filtro_valor: Valor para filtragem
-        filtro_condicao: Condição de filtragem (igual, contém, etc.)
-        property_id: ID da propriedade GA4 no formato "properties/XXXXXX"
-    """
-    # Garantir que "contem" esteja no formato correto
-    if filtro_condicao in ["contém", "contains", "contém"]:
-        filtro_condicao = "contem"
-        print(f"DIAGNÓSTICO MCP: Convertendo condição de filtro para 'contem'", file=sys.stderr)
-    
-    return analytics.consulta_ga4(
-        dimensao, metrica, periodo,
-        filtro_campo, filtro_valor, filtro_condicao, property_id
-    )
-
-@mcp.tool()
-def consulta_ga4_pivot(
-    dimensao: str = "country",
-    dimensao_pivot: str = "deviceCategory",
-    metrica: str = "sessions",
-    periodo: str = "7daysAgo",
-    filtro_campo: str = "",
-    filtro_valor: str = "",
-    filtro_condicao: str = "igual",
-    limite_linhas: int = 30,
-    property_id: str = "properties/254018746"
-) -> str:
-    """
-    Consulta pivot no GA4 com múltiplas dimensões cruzadas.
-    
-    Args:
-        dimensao: Dimensões para análise, separadas por vírgula
-        dimensao_pivot: Dimensões para pivot, separadas por vírgula
-        metrica: Métricas para análise, separadas por vírgula
-        periodo: Data inicial (ex: "7daysAgo", "2023-01-01")
-        filtro_campo: Campo para filtragem
-        filtro_valor: Valor para filtragem
-        filtro_condicao: Condição de filtragem (igual, contém, etc.)
-        limite_linhas: Limite de linhas retornadas
-        property_id: ID da propriedade GA4 no formato "properties/XXXXXX"
-    """
-    # Garantir que "contem" esteja no formato correto
-    if filtro_condicao in ["contém", "contains", "contém"]:
-        filtro_condicao = "contem"
-        print(f"DIAGNÓSTICO MCP PIVOT: Convertendo condição de filtro para 'contem'", file=sys.stderr)
-    
-    return analytics.consulta_ga4_pivot(
-        dimensao, dimensao_pivot, metrica, periodo,
-        filtro_campo, filtro_valor, filtro_condicao, limite_linhas, property_id
-    )
-
-@mcp.tool()
-def consulta_search_console_custom(
-    data_inicio: str = "30daysAgo",
-    data_fim: str = "today",
-    dimensoes: list[str] = ["query"],
-    metrica_extra: bool = True,
-    filtros: list[dict] = None,
-    limite: int = 20
-) -> dict:
-    """
-    Consulta customizada ao Search Console com suporte a múltiplas dimensões e filtros.
-    
-    Args:
-        data_inicio: "30daysAgo", "today" ou "YYYY-MM-DD"
-        data_fim: "today" ou "YYYY-MM-DD"
-        dimensoes: lista de dimensões como "query", "date", "page", "country"
-        metrica_extra: inclui todas as métricas padrão (clicks, impressions, ctr, position)
-        filtros: lista de filtros no formato {"dimension": "query", "operator": "contains", "expression": "mba"}
-        limite: número máximo de linhas
-    """
-    return search_console.consulta_search_console_custom(
-        data_inicio, data_fim, dimensoes, metrica_extra, filtros, limite
-    )
-
-@mcp.tool()
-def analise_youtube(pergunta: str) -> dict:
-    """
-    Analisa comentários e tendências do YouTube sobre um determinado assunto.
-    
-    Args:
-        pergunta: Pergunta ou tema para análise (ex: "o que estão falando sobre MBA no YouTube")
-    """
-    return youtube.youtube_analyzer(pergunta)
-
-# Ferramentas para Google Drive e Sheets
-@mcp.tool()
-def criar_planilha(
-    titulo: str,
-    dados_iniciais: list = None
-) -> dict:
-    """
-    Cria uma nova planilha no Google Drive e a compartilha com vinicius.matsumoto@fgv.br
-    
-    Args:
-        titulo: Nome da planilha a ser criada
-        dados_iniciais: Lista opcional de dados para adicionar inicialmente (lista de listas)
-    """
-    return drive.criar_planilha(titulo, dados_iniciais)
-
-@mcp.tool()
-def listar_planilhas() -> dict:
-    """
-    Lista todas as planilhas que a conta de serviço tem acesso.
-    """
-    return drive.listar_planilhas()
-
-@mcp.tool()
-def criar_aba(
-    planilha_id: str,
-    nome_aba: str
-) -> dict:
-    """
-    Cria uma nova aba em uma planilha existente.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da nova aba
-    """
-    return drive.criar_nova_aba(planilha_id, nome_aba)
-
-@mcp.tool()
-def sobrescrever_sheet(
-    planilha_id: str,
-    nome_aba: str,
-    dados: list
-) -> dict:
-    """
-    Sobrescreve os dados de uma aba específica.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da aba a ser sobrescrita
-        dados: Lista de dados (lista de listas)
-    """
-    return drive.sobrescrever_aba(planilha_id, nome_aba, dados)
-
-@mcp.tool()
-def adicionar_celulas(
-    planilha_id: str,
-    nome_aba: str,
-    dados: list,
-    inicio: str = "A1"
-) -> dict:
-    """
-    Adiciona dados em células específicas sem sobrescrever outras áreas.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da aba
-        dados: Lista de dados (lista de listas)
-        inicio: Célula inicial (ex: "A1")
-    """
-    return drive.adicionar_celulas(planilha_id, nome_aba, dados, inicio)
-
-# Funções do Trello
-@mcp.tool()
-def trello_listar_quadros() -> dict:
-    """
-    Lista todos os quadros do Trello do usuário.
-    
-    Returns:
-        dict: Informações sobre quadros disponíveis
-    """
-    return trello.listar_quadros()
-
-@mcp.tool()
-def trello_listar_listas(board_id: str) -> dict:
-    """
-    Lista todas as listas (colunas) de um quadro do Trello.
-    
-    Args:
-        board_id: ID do quadro do Trello
-        
-    Returns:
-        dict: Informações sobre as listas do quadro
-    """
-    return trello.listar_listas(board_id)
-
-@mcp.tool()
-def trello_listar_cartoes(list_id: str) -> dict:
-    """
-    Lista todos os cartões (tarefas) de uma lista do Trello.
-    
-    Args:
-        list_id: ID da lista do Trello
-        
-    Returns:
-        dict: Informações sobre os cartões da lista
-    """
-    return trello.listar_cartoes(list_id)
-
-@mcp.tool()
-def trello_criar_cartao(
-    list_id: str,
-    nome: str,
-    descricao: str = ""
-) -> dict:
-    """
-    Cria um novo cartão (tarefa) em uma lista do Trello.
-    
-    Args:
-        list_id: ID da lista onde o cartão será criado
-        nome: Nome do cartão/tarefa
-        descricao: Descrição do cartão (opcional)
-        
-    Returns:
-        dict: Informações sobre o cartão criado
-    """
-    return trello.criar_cartao(list_id, nome, descricao)
-
-@mcp.tool()
-def trello_mover_cartao(
-    card_id: str,
-    list_id: str
-) -> dict:
-    """
-    Move um cartão (tarefa) para outra lista no Trello.
-    
-    Args:
-        card_id: ID do cartão a ser movido
-        list_id: ID da lista de destino
-        
-    Returns:
-        dict: Informações sobre o resultado da operação
-    """
-    return trello.mover_cartao(card_id, list_id)
-
-@mcp.tool()
-def trello_listar_tarefas_quadro(board_id: str) -> dict:
-    """
-    Lista todas as tarefas de um quadro do Trello organizadas por lista.
-    
-    Args:
-        board_id: ID do quadro do Trello
-        
-    Returns:
-        dict: Todas as tarefas organizadas por lista
-    """
-    return trello.listar_tarefas_quadro(board_id)
-
-
 @app.get("/openapi.json")
-def custom_openapi():
+def get_openapi():
+    """Personaliza a descrição OpenAPI."""
     if app.openapi_schema:
         return app.openapi_schema
-
+        
     openapi_schema = get_openapi(
         title="Analytics Agent API",
         version="1.0.0",
         description="API para consultas em Analytics (GA4), Search Console, YouTube, Drive e Trello",
         routes=app.routes,
     )
-
-    # ✅ Inclui campo servers corretamente
+    
+    # Adiciona informações sobre o servidor
     openapi_schema["servers"] = [
-        {
-            "url": "https://dex-mcp-server-1212.onrender.com",
-            "description": "Servidor principal Render"
-        }
+        {"url": "https://analytics-claude-mcp.onrender.com", "description": "Servidor Render"}
     ]
-
+    
     app.openapi_schema = openapi_schema
     return app.openapi_schema
-    
+
+# Rota adicional para compatibilidade com MCP
+@app.get("/.well-known/openapi.json")
+def mcp_openapi():
+    """Rota para a especificação OpenAPI no formato exigido pelo MCP."""
+    return get_openapi()
+
 # Tenta integrar o router do MCP, se disponível
 try:
     if hasattr(mcp, 'router'):
