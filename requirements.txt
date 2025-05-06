@@ -9,6 +9,7 @@ anthropic>=0.5.0
 google-auth>=2.16.0
 google-analytics-data>=0.16.0
 google-api-python-client>=2.70.0
+google-analytics-admin>=0.6.0  # Adicionado para suportar o AnalyticsAdminServiceClient
 
 # NLP
 nltk>=3.8.1
