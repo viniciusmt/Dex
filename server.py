@@ -500,7 +500,23 @@ def get_openapi():
 @app.get("/.well-known/openapi.json")
 def mcp_openapi():
     """Rota para a especificação OpenAPI no formato exigido pelo MCP."""
-    return get_openapi()
+    if app.openapi_schema:
+        return app.openapi_schema
+        
+    openapi_schema = get_openapi(
+        title="Analytics Agent API",
+        version="1.0.0",
+        description="API para consultas em Analytics (GA4), Search Console, YouTube, Drive e Trello",
+        routes=app.routes,
+    )
+    
+    # Adiciona informações sobre o servidor
+    openapi_schema["servers"] = [
+        {"url": "https://dex-mcp-server-1212.onrender.com", "description": "Servidor Render"}
+    ]
+    
+    # Importante: NÃO atribuir ao app.openapi_schema para evitar conflitos
+    return openapi_schema
 
 # Tenta integrar o router do MCP, se disponível
 try:
