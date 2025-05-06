@@ -10,6 +10,8 @@ import anthropic
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List, Literal
 from dotenv import load_dotenv
+from fastapi.openapi.utils import get_openapi
+
 
 load_dotenv()
 
