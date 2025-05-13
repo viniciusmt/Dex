@@ -85,7 +85,7 @@ class GA4PivotQuery(BaseModel):
         default="igual",
         description="Condição do filtro: igual, contem, começa com, termina com, regex, regex completa"
     )
-    limite_linhas: int = 30
+    limite_linhas: int = 100
     property_id: str = Field(
         default="properties/254018746",
         description="ID da propriedade GA4 no formato 'properties/XXXXXX'"
@@ -97,7 +97,7 @@ class SearchConsoleQuery(BaseModel):
     dimensoes: List[str] = ["query"]
     metrica_extra: bool = True
     filtros: Optional[List[Dict[str, Any]]] = None
-    limite: int = 20
+    limite: int = 60
 
 class YouTubeQuery(BaseModel):
     pergunta: str
