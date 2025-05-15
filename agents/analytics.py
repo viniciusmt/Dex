@@ -52,6 +52,103 @@ def init_analytics_client():
 # Inicializa o cliente GA4
 client = init_analytics_client()
 
+def listar_contas_ga4():
+    """
+    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
+    
+    Returns:
+        dict: Dicionário com informações sobre contas e propriedades ou erro
+    """
+    try:
+        from google.analytics.admin_v1alpha import AnalyticsAdminServiceClient
+        from google.analytics.admin_v1alpha.types import ListPropertiesRequest
+        
+        # Verifica se as credenciais existem (usa as mesmas credenciais do cliente de dados)
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if not creds_json:
+            return {"erro": "Credenciais do Google não encontradas na variável GOOGLE_CREDENTIALS"}
+        
+        try:
+            creds_dict = json.loads(creds_json)
+            credentials = service_account.Credentials.from_service_account_info(creds_dict)
+        except Exception as e:
+            return {"erro": f"Erro ao processar credenciais: {str(e)}"}
+        
+        # Inicializa o cliente Admin
+        admin_client = AnalyticsAdminServiceClient(credentials=credentials)
+        
+        print("DIAGNÓSTICO: Listando contas GA4...", file=sys.stderr)
+        
+        # Lista todas as contas
+        accounts = admin_client.list_accounts()
+        
+        resultado = {
+            "sucesso": True,
+            "mensagem": "Contas e propriedades listadas com sucesso",
+            "contas": []
+        }
+        
+        conta_count = 0
+        for account in accounts:
+            conta_count += 1
+            print(f"DIAGNÓSTICO: Processando conta {conta_count}: {account.display_name}", file=sys.stderr)
+            
+            conta_info = {
+                "id_conta": account.name,
+                "nome_conta": account.display_name,
+                "propriedades": []
+            }
+            
+            try:
+                # Lista propriedades dessa conta  
+                request = ListPropertiesRequest(filter=f"parent:{account.name}")
+                properties = admin_client.list_properties(request=request)
+                
+                prop_count = 0
+                for prop in properties:
+                    prop_count += 1
+                    print(f"DIAGNÓSTICO: Processando propriedade {prop_count}: {prop.display_name}", file=sys.stderr)
+                    
+                    conta_info["propriedades"].append({
+                        "id_propriedade": prop.name,
+                        "nome_propriedade": prop.display_name,
+                        # O formato que as funções existentes esperam 
+                        "property_id": prop.name,
+                        "tipo": prop.property_type.name if hasattr(prop, 'property_type') else "GA4"
+                    })
+                    
+                print(f"DIAGNÓSTICO: Encontradas {prop_count} propriedades na conta {account.display_name}", file=sys.stderr)
+                
+            except Exception as e:
+                print(f"Erro ao listar propriedades da conta {account.name}: {str(e)}", file=sys.stderr)
+                conta_info["erro_propriedades"] = str(e)
+            
+            resultado["contas"].append(conta_info)
+        
+        print(f"DIAGNÓSTICO: Total de {conta_count} contas processadas", file=sys.stderr)
+        return resultado
+    
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Erro ao listar contas GA4: {str(e)}\n{error_details}", file=sys.stderr)
+        return {"erro": f"Erro ao listar contas GA4: {str(e)}"}
+
+def responder(pergunta):
+    """
+    Função para compatibilidade com o sistema de agentes.
+    Responde a perguntas sobre analytics.
+    """
+    pergunta_lower = pergunta.lower()
+    
+    if "contas" in pergunta_lower or "listar contas" in pergunta_lower:
+        resultado = listar_contas_ga4()
+        return {"response": f"Resultado da consulta: {json.dumps(resultado, ensure_ascii=False, indent=2)}"}
+    
+    # Outros tipos de consulta podem ser adicionados aqui
+    return {"response": "Comando não reconhecido. Tente perguntar sobre 'listar contas ga4'."}
+
+
 def consulta_ga4(
     dimensao: str = "country",
     metrica: str = "sessions",
