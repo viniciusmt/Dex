@@ -63,6 +63,7 @@ class GA4Query(BaseModel):
     dimensao: str = "country"
     metrica: str = "sessions"
     periodo: str = "7daysAgo"
+    data_fim: str = "today"  # Nova variável para data final
     filtro_campo: str = ""
     filtro_valor: str = ""
     filtro_condicao: str = Field(
@@ -79,6 +80,7 @@ class GA4PivotQuery(BaseModel):
     dimensao_pivot: str = "deviceCategory"
     metrica: str = "sessions"
     periodo: str = "7daysAgo"
+    data_fim: str = "today"  # Nova variável para data final
     filtro_campo: str = ""
     filtro_valor: str = ""
     filtro_condicao: str = Field(
