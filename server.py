@@ -275,6 +275,45 @@ async def api_listar_contas_ga4():
         print(f"Erro ao listar contas GA4: {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro ao listar contas GA4: {str(e)}")
 
+
+# Adicione este endpoint no seu server.py, próximo aos outros endpoints de API
+
+@app.post("/api/consulta_ga4")
+async def api_consulta_ga4(query: GA4Query):
+    """
+    Consulta dados do Google Analytics 4.
+    
+    Returns:
+        dict: Resultado da consulta GA4
+    """
+    try:
+        # Garantir que "contem" esteja no formato correto
+        if query.filtro_condicao in ["contém", "contains", "contém"]:
+            query.filtro_condicao = "contem"
+            print(f"DIAGNÓSTICO API GA4: Convertendo condição de filtro para 'contem'", file=sys.stderr)
+        
+        result = analytics.consulta_ga4(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        print(f"Erro na consulta GA4: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Erro na consulta GA4: {str(e)}")
+
+@app.get("/api/listar_contas_ga4")
+async def api_listar_contas_ga4():
+    """
+    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
+    
+    Returns:
+        dict: Informações sobre contas e propriedades GA4
+    """
+    try:
+        result = analytics.listar_contas_ga4()
+        return {"result": result}
+    except Exception as e:
+        print(f"Erro ao listar contas GA4: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Erro ao listar contas GA4: {str(e)}")
+
+
 @app.post("/api/consulta_ga4_pivot")
 async def api_consulta_ga4_pivot(query: GA4PivotQuery):
     try:
