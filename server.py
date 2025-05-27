@@ -59,7 +59,6 @@ class NaturalLanguageQuery(BaseModel):
     pergunta: str
     contexto: Optional[str] = None
 
-
 class ListarContasGA4Request(BaseModel):
     """Classe para requisição de listagem de contas GA4"""
     pass
@@ -98,13 +97,24 @@ class GA4PivotQuery(BaseModel):
         description="ID da propriedade GA4 no formato 'properties/XXXXXX'"
     )
 
+# Novas classes para Search Console
+class SearchConsoleListarSitesRequest(BaseModel):
+    """Classe para requisição de listagem de sites Search Console"""
+    pass
+
 class SearchConsoleQuery(BaseModel):
+    site_url: str = Field(description="URL do site a ser analisado (obrigatório)")
     data_inicio: str = "30daysAgo"
     data_fim: str = "today"
     dimensoes: List[str] = ["query"]
     metrica_extra: bool = True
     filtros: Optional[List[Dict[str, Any]]] = None
-    limite: int = 60
+    limite: int = 100
+    query_filtro: str = Field(default="", description="Filtro específico para queries - usa condição 'contém' automaticamente")
+    pagina_filtro: str = Field(default="", description="Filtro específico para páginas - usa condição 'contém' automaticamente")
+
+class SearchConsoleVerificarSiteRequest(BaseModel):
+    site_url: str = Field(description="URL do site para verificar")
 
 class YouTubeQuery(BaseModel):
     pergunta: str
@@ -154,6 +164,364 @@ class TrelloMoverCartaoRequest(BaseModel):
 class TrelloListarTarefasQuadroRequest(BaseModel):
     board_id: str
 
+# Registrar ferramentas MCP
+@mcp.tool()
+def listar_sites_search_console() -> dict:
+    """
+    Lista todos os sites disponíveis no Search Console para a conta de serviço.
+    
+    Returns:
+        dict: Lista de sites disponíveis no Search Console
+    """
+    try:
+        return search_console.listar_sites_search_console()
+    except Exception as e:
+        return {"erro": f"Erro ao listar sites do Search Console: {str(e)}"}
+
+@mcp.tool()
+def consulta_search_console_custom(
+    site_url: str,
+    data_inicio: str = "30daysAgo",
+    data_fim: str = "today",
+    dimensoes: list[str] = ["query"],
+    metrica_extra: bool = True,
+    filtros: list[dict] = None,
+    limite: int = 100,
+    query_filtro: str = "",
+    pagina_filtro: str = ""
+) -> dict:
+    """
+    Consulta customizada ao Search Console com suporte a múltiplas dimensões e filtros.
+    
+    Args:
+        site_url: URL do site a ser analisado (obrigatório)
+        data_inicio: Data de início (padrão: "30daysAgo")
+        data_fim: Data de fim (padrão: "today") 
+        dimensoes: Lista de dimensões para análise (padrão: ["query"])
+        metrica_extra: Se deve incluir métricas extras como CTR e posição (padrão: True)
+        filtros: Lista de filtros customizados no formato [{"dimension": "query", "operator": "contains", "expression": "termo"}]
+        limite: Número máximo de resultados (padrão: 100)
+        query_filtro: Filtro específico para queries - usa condição 'contém' automaticamente (opcional)
+        pagina_filtro: Filtro específico para páginas - usa condição 'contém' automaticamente (opcional)
+        
+    Returns:
+        dict: Dados da consulta Search Console
+    """
+    try:
+        return search_console.consulta_search_console_custom(
+            site_url=site_url,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            dimensoes=dimensoes,
+            metrica_extra=metrica_extra,
+            filtros=filtros,
+            limite=limite,
+            query_filtro=query_filtro,
+            pagina_filtro=pagina_filtro
+        )
+    except Exception as e:
+        return {"erro": f"Erro na consulta_search_console_custom: {str(e)}"}
+
+@mcp.tool()
+def verificar_propriedade_site_search_console(site_url: str) -> dict:
+    """
+    Verifica se um site específico está disponível no Search Console.
+    
+    Args:
+        site_url: URL do site para verificar
+        
+    Returns:
+        dict: Informações sobre a disponibilidade do site no Search Console
+    """
+    try:
+        return search_console.verificar_propriedade_site_search_console(site_url)
+    except Exception as e:
+        return {"erro": f"Erro ao verificar propriedade do site: {str(e)}"}
+
+@mcp.tool()
+def listar_contas_ga4() -> dict:
+    """
+    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
+    
+    Returns:
+        dict: Informações sobre contas e propriedades
+    """
+    try:
+        return analytics.listar_contas_ga4()
+    except Exception as e:
+        return {"erro": f"Erro ao listar contas GA4: {str(e)}"}
+
+@mcp.tool()
+def consulta_ga4(
+    dimensao: str = "country",
+    metrica: str = "sessions",
+    periodo: str = "7daysAgo",
+    data_fim: str = "today",
+    filtro_campo: str = "",
+    filtro_valor: str = "",
+    filtro_condicao: str = "igual",
+    property_id: str = "properties/254018746"
+) -> dict:
+    """
+    Consulta dados do Google Analytics 4.
+    
+    Args:
+        dimensao: Dimensões para análise (ex: 'country', 'city')
+        metrica: Métricas para análise (ex: 'sessions', 'users')
+        periodo: Data de início (ex: '7daysAgo', '2024-01-01')
+        data_fim: Data de fim (ex: 'today', '2024-12-31')
+        filtro_campo: Campo para filtro
+        filtro_valor: Valor do filtro
+        filtro_condicao: Condição do filtro
+        property_id: ID da propriedade GA4
+        
+    Returns:
+        dict: Resultado da consulta GA4
+    """
+    try:
+        return analytics.consulta_ga4(
+            dimensao=dimensao,
+            metrica=metrica,
+            periodo=periodo,
+            data_fim=data_fim,
+            filtro_campo=filtro_campo,
+            filtro_valor=filtro_valor,
+            filtro_condicao=filtro_condicao,
+            property_id=property_id
+        )
+    except Exception as e:
+        return {"erro": f"Erro na consulta GA4: {str(e)}"}
+
+@mcp.tool()
+def consulta_ga4_pivot(
+    dimensao: str = "country",
+    dimensao_pivot: str = "deviceCategory",
+    metrica: str = "sessions",
+    periodo: str = "7daysAgo",
+    data_fim: str = "today",
+    filtro_campo: str = "",
+    filtro_valor: str = "",
+    filtro_condicao: str = "igual",
+    limite_linhas: int = 100,
+    property_id: str = "properties/254018746"
+) -> dict:
+    """
+    Consulta GA4 com tabela pivot para análise cruzada de dimensões.
+    
+    Args:
+        dimensao: Dimensão principal
+        dimensao_pivot: Dimensão para cruzamento (pivot)
+        metrica: Métrica para análise
+        periodo: Data de início (ex: '7daysAgo', '2024-01-01')
+        data_fim: Data de fim (ex: 'today', '2024-12-31')
+        filtro_campo: Campo para filtro
+        filtro_valor: Valor do filtro
+        filtro_condicao: Condição do filtro
+        limite_linhas: Limite de linhas no resultado
+        property_id: ID da propriedade GA4
+        
+    Returns:
+        dict: Resultado da consulta GA4 Pivot
+    """
+    try:
+        return analytics.consulta_ga4_pivot(
+            dimensao=dimensao,
+            dimensao_pivot=dimensao_pivot,
+            metrica=metrica,
+            periodo=periodo,
+            data_fim=data_fim,
+            filtro_campo=filtro_campo,
+            filtro_valor=filtro_valor,
+            filtro_condicao=filtro_condicao,
+            limite_linhas=limite_linhas,
+            property_id=property_id
+        )
+    except Exception as e:
+        return {"erro": f"Erro na consulta GA4 Pivot: {str(e)}"}
+
+@mcp.tool()
+def analise_youtube(pergunta: str) -> dict:
+    """
+    Analisa comentários do YouTube sobre um tópico específico.
+    
+    Args:
+        pergunta: Pergunta ou tópico a ser analisado
+        
+    Returns:
+        dict: Análise dos comentários do YouTube
+    """
+    try:
+        return youtube.youtube_analyzer(pergunta)
+    except Exception as e:
+        return {"erro": f"Erro na analise_youtube: {str(e)}"}
+
+# Ferramentas para Google Drive e Sheets
+@mcp.tool()
+def criar_planilha(titulo: str, dados_iniciais: list = None) -> dict:
+    """
+    Cria uma nova planilha no Google Drive e a compartilha com vinicius.matsumoto@fgv.br
+    
+    Args:
+        titulo: Nome da planilha a ser criada
+        dados_iniciais: Lista opcional de dados para adicionar inicialmente (lista de listas)
+    """
+    try:
+        return drive.criar_planilha(titulo, dados_iniciais)
+    except Exception as e:
+        return {"erro": f"Erro ao criar planilha: {str(e)}"}
+
+@mcp.tool()
+def listar_planilhas() -> dict:
+    """
+    Lista todas as planilhas que a conta de serviço tem acesso.
+    """
+    try:
+        return drive.listar_planilhas()
+    except Exception as e:
+        return {"erro": f"Erro ao listar planilhas: {str(e)}"}
+
+@mcp.tool()
+def criar_aba(planilha_id: str, nome_aba: str) -> dict:
+    """
+    Cria uma nova aba em uma planilha existente.
+    
+    Args:
+        planilha_id: ID da planilha
+        nome_aba: Nome da nova aba
+    """
+    try:
+        return drive.criar_nova_aba(planilha_id, nome_aba)
+    except Exception as e:
+        return {"erro": f"Erro ao criar aba: {str(e)}"}
+
+@mcp.tool()
+def sobrescrever_sheet(planilha_id: str, nome_aba: str, dados: list) -> dict:
+    """
+    Sobrescreve os dados de uma aba específica.
+    
+    Args:
+        planilha_id: ID da planilha
+        nome_aba: Nome da aba a ser sobrescrita
+        dados: Lista de dados (lista de listas)
+    """
+    try:
+        return drive.sobrescrever_aba(planilha_id, nome_aba, dados)
+    except Exception as e:
+        return {"erro": f"Erro ao sobrescrever sheet: {str(e)}"}
+
+@mcp.tool()
+def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list, inicio: str = "A1") -> dict:
+    """
+    Adiciona dados em células específicas sem sobrescrever outras áreas.
+    
+    Args:
+        planilha_id: ID da planilha
+        nome_aba: Nome da aba
+        dados: Lista de dados (lista de listas)
+        inicio: Célula inicial (ex: "A1")
+    """
+    try:
+        return drive.adicionar_celulas(planilha_id, nome_aba, dados, inicio)
+    except Exception as e:
+        return {"erro": f"Erro ao adicionar células: {str(e)}"}
+
+# Ferramentas para Trello
+@mcp.tool()
+def trello_listar_quadros() -> dict:
+    """
+    Lista todos os quadros do Trello do usuário.
+    
+    Returns:
+        dict: Informações sobre quadros disponíveis
+    """
+    try:
+        return trello.listar_quadros()
+    except Exception as e:
+        return {"erro": f"Erro ao listar quadros do Trello: {str(e)}"}
+
+@mcp.tool()
+def trello_listar_listas(board_id: str) -> dict:
+    """
+    Lista todas as listas (colunas) de um quadro do Trello.
+    
+    Args:
+        board_id: ID do quadro do Trello
+        
+    Returns:
+        dict: Informações sobre as listas do quadro
+    """
+    try:
+        return trello.listar_listas(board_id)
+    except Exception as e:
+        return {"erro": f"Erro ao listar listas do Trello: {str(e)}"}
+
+@mcp.tool()
+def trello_listar_cartoes(list_id: str) -> dict:
+    """
+    Lista todos os cartões (tarefas) de uma lista do Trello.
+    
+    Args:
+        list_id: ID da lista do Trello
+        
+    Returns:
+        dict: Informações sobre os cartões da lista
+    """
+    try:
+        return trello.listar_cartoes(list_id)
+    except Exception as e:
+        return {"erro": f"Erro ao listar cartões do Trello: {str(e)}"}
+
+@mcp.tool()
+def trello_criar_cartao(list_id: str, nome: str, descricao: str = "") -> dict:
+    """
+    Cria um novo cartão (tarefa) em uma lista do Trello.
+    
+    Args:
+        list_id: ID da lista onde o cartão será criado
+        nome: Nome do cartão/tarefa
+        descricao: Descrição do cartão (opcional)
+        
+    Returns:
+        dict: Informações sobre o cartão criado
+    """
+    try:
+        return trello.criar_cartao(list_id, nome, descricao)
+    except Exception as e:
+        return {"erro": f"Erro ao criar cartão do Trello: {str(e)}"}
+
+@mcp.tool()
+def trello_mover_cartao(card_id: str, list_id: str) -> dict:
+    """
+    Move um cartão (tarefa) para outra lista no Trello.
+    
+    Args:
+        card_id: ID do cartão a ser movido
+        list_id: ID da lista de destino
+        
+    Returns:
+        dict: Informações sobre o resultado da operação
+    """
+    try:
+        return trello.mover_cartao(card_id, list_id)
+    except Exception as e:
+        return {"erro": f"Erro ao mover cartão do Trello: {str(e)}"}
+
+@mcp.tool()
+def trello_listar_tarefas_quadro(board_id: str) -> dict:
+    """
+    Lista todas as tarefas de um quadro do Trello organizadas por lista.
+    
+    Args:
+        board_id: ID do quadro do Trello
+        
+    Returns:
+        dict: Todas as tarefas organizadas por lista
+    """
+    try:
+        return trello.listar_tarefas_quadro(board_id)
+    except Exception as e:
+        return {"erro": f"Erro ao listar tarefas do quadro Trello: {str(e)}"}
+
 @app.post("/perguntar")
 async def perguntar(query: NaturalLanguageQuery):
     try:
@@ -172,11 +540,12 @@ Pergunta: {query.pergunta}
 Retorne um JSON neste formato:
 
 {{
-  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "search_console_listar_sites" ou "search_console_verificar_site" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
   "parametros": {{}}
 }}
 
 Para filtros GA4, use a condição "contem" (sem acento) para buscas parciais.
+Para Search Console, o site_url é obrigatório nas consultas.
 
 Apenas o JSON. Nenhuma explicação.
 """
@@ -209,6 +578,10 @@ Apenas o JSON. Nenhuma explicação.
             resultado = analytics.consulta_ga4_pivot(**parametros)
         elif tipo_consulta == "search_console":
             resultado = search_console.consulta_search_console_custom(**parametros)
+        elif tipo_consulta == "search_console_listar_sites":
+            resultado = search_console.listar_sites_search_console()
+        elif tipo_consulta == "search_console_verificar_site":
+            resultado = search_console.verificar_propriedade_site_search_console(**parametros)
         elif tipo_consulta == "youtube":
             resultado = youtube.youtube_analyzer(parametros.get("pergunta", query.pergunta))
         elif tipo_consulta == "listar_contas_ga4":
@@ -275,9 +648,6 @@ async def api_listar_contas_ga4():
         print(f"Erro ao listar contas GA4: {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro ao listar contas GA4: {str(e)}")
 
-
-# Adicione este endpoint no seu server.py, próximo aos outros endpoints de API
-
 @app.post("/api/consulta_ga4")
 async def api_consulta_ga4(query: GA4Query):
     """
@@ -298,22 +668,6 @@ async def api_consulta_ga4(query: GA4Query):
         print(f"Erro na consulta GA4: {str(e)}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"Erro na consulta GA4: {str(e)}")
 
-@app.get("/api/listar_contas_ga4")
-async def api_listar_contas_ga4():
-    """
-    Lista todas as contas do Google Analytics 4 e suas propriedades associadas.
-    
-    Returns:
-        dict: Informações sobre contas e propriedades GA4
-    """
-    try:
-        result = analytics.listar_contas_ga4()
-        return {"result": result}
-    except Exception as e:
-        print(f"Erro ao listar contas GA4: {str(e)}", file=sys.stderr)
-        raise HTTPException(status_code=500, detail=f"Erro ao listar contas GA4: {str(e)}")
-
-
 @app.post("/api/consulta_ga4_pivot")
 async def api_consulta_ga4_pivot(query: GA4PivotQuery):
     try:
@@ -327,8 +681,57 @@ async def api_consulta_ga4_pivot(query: GA4PivotQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Novos endpoints para Search Console
+@app.get("/api/search_console/listar_sites")
+async def api_listar_sites_search_console():
+    """
+    Lista todos os sites disponíveis no Search Console para a conta de serviço.
+    
+    Returns:
+        dict: Lista de sites disponíveis no Search Console
+    """
+    try:
+        result = search_console.listar_sites_search_console()
+        return {"result": result}
+    except Exception as e:
+        print(f"Erro ao listar sites Search Console: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Erro ao listar sites Search Console: {str(e)}")
+
+@app.post("/api/search_console/consulta_custom")
+async def api_consulta_search_console_custom(query: SearchConsoleQuery):
+    """
+    Consulta customizada ao Search Console com suporte a múltiplas dimensões e filtros.
+    
+    Returns:
+        dict: Dados da consulta Search Console
+    """
+    try:
+        result = search_console.consulta_search_console_custom(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        print(f"Erro na consulta Search Console: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Erro na consulta Search Console: {str(e)}")
+
+@app.post("/api/search_console/verificar_site")
+async def api_verificar_propriedade_site_search_console(query: SearchConsoleVerificarSiteRequest):
+    """
+    Verifica se um site específico está disponível no Search Console.
+    
+    Returns:
+        dict: Informações sobre a disponibilidade do site no Search Console
+    """
+    try:
+        result = search_console.verificar_propriedade_site_search_console(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        print(f"Erro ao verificar propriedade do site: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Erro ao verificar propriedade do site: {str(e)}")
+
 @app.post("/api/consulta_search_console")
 async def api_consulta_search_console(query: SearchConsoleQuery):
+    """
+    Endpoint mantido para compatibilidade - redireciona para consulta_custom
+    """
     try:
         result = search_console.consulta_search_console_custom(**query.dict())
         return {"result": result}
