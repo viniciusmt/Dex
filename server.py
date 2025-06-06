@@ -119,28 +119,32 @@ class SearchConsoleVerificarSiteRequest(BaseModel):
 class YouTubeQuery(BaseModel):
     pergunta: str
 
-# Classes para as operações de Drive/Sheets
+# 1. CORRIGIR MODELOS PYDANTIC
+
 class CriarPlanilhaRequest(BaseModel):
-    titulo: str
-    dados_iniciais: Optional[List[List[Any]]] = None
+    nome_planilha: str  # MUDANÇA: titulo → nome_planilha
+    # REMOVER: dados_iniciais não é usado pela função criar_planilha
 
 class ListarPlanilhasRequest(BaseModel):
-    pass
+    limite: int = 20  # ADICIONAR: parâmetro que a função aceita
 
 class CriarAbaRequest(BaseModel):
     planilha_id: str
     nome_aba: str
+    linhas: int = 100      # ADICIONAR: parâmetros opcionais da função
+    colunas: int = 20      # ADICIONAR: parâmetros opcionais da função
 
 class SobrescreverSheetRequest(BaseModel):
     planilha_id: str
     nome_aba: str
     dados: List[List[Any]]
+    # Esta está correta
 
 class AdicionarCelulasRequest(BaseModel):
     planilha_id: str
     nome_aba: str
     dados: List[List[Any]]
-    inicio: str = "A1"
+    # REMOVER: inicio - a função não aceita este parâmetro
 
 # Classes para operações do Trello
 class TrelloListarQuadrosRequest(BaseModel):
@@ -355,42 +359,45 @@ def analise_youtube(pergunta: str) -> dict:
     except Exception as e:
         return {"erro": f"Erro na analise_youtube: {str(e)}"}
 
-# Ferramentas para Google Drive e Sheets
 @mcp.tool()
-def criar_planilha(titulo: str, dados_iniciais: list = None) -> dict:
+def criar_planilha(nome_planilha: str) -> dict:  # MUDANÇA: titulo → nome_planilha, remover dados_iniciais
     """
     Cria uma nova planilha no Google Drive e a compartilha com vinicius.matsumoto@fgv.br
     
     Args:
-        titulo: Nome da planilha a ser criada
-        dados_iniciais: Lista opcional de dados para adicionar inicialmente (lista de listas)
+        nome_planilha: Nome da planilha a ser criada
     """
     try:
-        return drive.criar_planilha(titulo, dados_iniciais)
+        return drive.criar_planilha(nome_planilha)  # MUDANÇA: passar apenas nome_planilha
     except Exception as e:
         return {"erro": f"Erro ao criar planilha: {str(e)}"}
 
 @mcp.tool()
-def listar_planilhas() -> dict:
+def listar_planilhas(limite: int = 20) -> dict:  # ADICIONAR: parâmetro limite
     """
     Lista todas as planilhas que a conta de serviço tem acesso.
+    
+    Args:
+        limite: Número máximo de planilhas a listar (padrão: 20)
     """
     try:
-        return drive.listar_planilhas()
+        return drive.listar_planilhas(limite)  # MUDANÇA: passar parâmetro limite
     except Exception as e:
         return {"erro": f"Erro ao listar planilhas: {str(e)}"}
 
 @mcp.tool()
-def criar_aba(planilha_id: str, nome_aba: str) -> dict:
+def criar_aba(planilha_id: str, nome_aba: str, linhas: int = 100, colunas: int = 20) -> dict:  # ADICIONAR: parâmetros opcionais
     """
     Cria uma nova aba em uma planilha existente.
     
     Args:
         planilha_id: ID da planilha
         nome_aba: Nome da nova aba
+        linhas: Número de linhas na nova aba (padrão: 100)
+        colunas: Número de colunas na nova aba (padrão: 20)
     """
     try:
-        return drive.criar_nova_aba(planilha_id, nome_aba)
+        return drive.criar_nova_aba(planilha_id, nome_aba, linhas, colunas)  # MUDANÇA: passar todos os parâmetros
     except Exception as e:
         return {"erro": f"Erro ao criar aba: {str(e)}"}
 
@@ -410,7 +417,7 @@ def sobrescrever_sheet(planilha_id: str, nome_aba: str, dados: list) -> dict:
         return {"erro": f"Erro ao sobrescrever sheet: {str(e)}"}
 
 @mcp.tool()
-def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list, inicio: str = "A1") -> dict:
+def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list) -> dict:  # REMOVER: parâmetro inicio
     """
     Adiciona dados em células específicas sem sobrescrever outras áreas.
     
@@ -418,12 +425,55 @@ def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list, inicio: str 
         planilha_id: ID da planilha
         nome_aba: Nome da aba
         dados: Lista de dados (lista de listas)
-        inicio: Célula inicial (ex: "A1")
     """
     try:
-        return drive.adicionar_celulas(planilha_id, nome_aba, dados, inicio)
+        return drive.adicionar_celulas(planilha_id, nome_aba, dados)  # REMOVER: parâmetro inicio
     except Exception as e:
         return {"erro": f"Erro ao adicionar células: {str(e)}"}
+
+# 3. CORRIGIR ENDPOINTS DA API
+
+@app.post("/api/drive/criar_planilha")
+async def api_criar_planilha(query: CriarPlanilhaRequest):
+    try:
+        result = drive.criar_planilha(query.nome_planilha)  # MUDANÇA: passar apenas nome_planilha
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/drive/listar_planilhas")
+async def api_listar_planilhas(limite: int = 20):  # ADICIONAR: parâmetro limite
+    try:
+        result = drive.listar_planilhas(limite)  # MUDANÇA: passar parâmetro limite
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/criar_aba")
+async def api_criar_aba(query: CriarAbaRequest):
+    try:
+        result = drive.criar_nova_aba(query.planilha_id, query.nome_aba, query.linhas, query.colunas)  # MUDANÇA: passar todos os parâmetros
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/sobrescrever_sheet")
+async def api_sobrescrever_sheet(query: SobrescreverSheetRequest):
+    try:
+        result = drive.sobrescrever_aba(**query.dict())
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/drive/adicionar_celulas")
+async def api_adicionar_celulas(query: AdicionarCelulasRequest):
+    try:
+        result = drive.adicionar_celulas(query.planilha_id, query.nome_aba, query.dados)  # REMOVER: parâmetro inicio
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 # Ferramentas para Trello
 @mcp.tool()
