@@ -555,3 +555,221 @@ def dados_para_lista(dados: str, formato: str = "auto") -> List[List[Any]]:
         log_debug(f"Erro ao converter dados: {str(e)}")
         # Retorna uma matriz com uma mensagem de erro
         return [["Erro ao processar dados", str(e)]]
+
+# Novas funções para leitura de planilhas e células ---------------------------
+
+def listar_abas(planilha_id: str) -> Dict[str, Any]:
+    """Lista todas as abas de uma planilha."""
+    try:
+        if not services:
+            return {"erro": "Serviços Sheets não inicializados corretamente"}
+
+        sheets_service = services["sheets"]
+
+        log_debug(f"Listando abas da planilha: {planilha_id}")
+        planilha_info = (
+            sheets_service.spreadsheets()
+            .get(spreadsheetId=planilha_id)
+            .execute()
+        )
+
+        abas = []
+        for sheet in planilha_info.get("sheets", []):
+            properties = sheet.get("properties", {})
+            abas.append(
+                {
+                    "id": properties.get("sheetId"),
+                    "nome": properties.get("title"),
+                    "indice": properties.get("index"),
+                    "tipo": properties.get("sheetType", "GRID"),
+                    "linhas": properties.get("gridProperties", {}).get(
+                        "rowCount", 0
+                    ),
+                    "colunas": properties.get("gridProperties", {}).get(
+                        "columnCount", 0
+                    ),
+                }
+            )
+
+        log_debug(f"Encontradas {len(abas)} abas")
+        return {
+            "sucesso": True,
+            "mensagem": f"Encontradas {len(abas)} abas",
+            "planilha_id": planilha_id,
+            "abas": abas,
+        }
+
+    except HttpError as e:
+        log_debug(f"Erro HTTP ao listar abas: {str(e)}")
+        return {
+            "sucesso": False,
+            "erro": f"Não foi possível acessar a planilha: {str(e)}",
+        }
+    except Exception as e:
+        log_debug(f"Erro ao listar abas: {str(e)}")
+        return {"sucesso": False, "erro": str(e)}
+
+
+def ler_dados(
+    planilha_id: str,
+    nome_aba: str = "Principal",
+    intervalo: str = "",
+    incluir_cabecalhos: bool = True,
+) -> Dict[str, Any]:
+    """Lê dados de uma aba específica da planilha."""
+    try:
+        if not services:
+            return {"erro": "Serviços Sheets não inicializados corretamente"}
+
+        sheets_service = services["sheets"]
+
+        range_name = f"{nome_aba}!{intervalo}" if intervalo else nome_aba
+
+        log_debug(
+            f"Lendo dados da planilha {planilha_id}, aba {nome_aba}, intervalo: {range_name}"
+        )
+
+        result = (
+            sheets_service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=planilha_id,
+                range=range_name,
+                valueRenderOption="FORMATTED_VALUE",
+                dateTimeRenderOption="FORMATTED_STRING",
+            )
+            .execute()
+        )
+
+        values = result.get("values", [])
+        if not values:
+            log_debug("Nenhum dado encontrado")
+            return {
+                "sucesso": True,
+                "mensagem": "Aba vazia ou sem dados",
+                "planilha_id": planilha_id,
+                "aba_nome": nome_aba,
+                "total_linhas": 0,
+                "dados": [],
+            }
+
+        dados_processados = []
+        cabecalhos = None
+
+        if incluir_cabecalhos and len(values) > 0:
+            cabecalhos = values[0]
+            dados_linhas = values[1:] if len(values) > 1 else []
+            for linha in dados_linhas:
+                linha_ajustada = linha + [""] * (len(cabecalhos) - len(linha))
+                linha_dict = {
+                    cabecalho: linha_ajustada[i]
+                    if i < len(linha_ajustada)
+                    else ""
+                    for i, cabecalho in enumerate(cabecalhos)
+                }
+                dados_processados.append(linha_dict)
+        else:
+            dados_processados = values
+
+        log_debug(f"Dados lidos com sucesso: {len(values)} linhas")
+        return {
+            "sucesso": True,
+            "mensagem": f"Dados lidos com sucesso da aba '{nome_aba}'",
+            "planilha_id": planilha_id,
+            "aba_nome": nome_aba,
+            "intervalo_lido": range_name,
+            "total_linhas": len(values),
+            "cabecalhos": cabecalhos,
+            "dados": dados_processados,
+        }
+
+    except HttpError as e:
+        log_debug(f"Erro HTTP ao ler dados: {str(e)}")
+        return {
+            "sucesso": False,
+            "erro": f"Não foi possível acessar a planilha ou aba: {str(e)}",
+        }
+    except Exception as e:
+        log_debug(f"Erro ao ler dados: {str(e)}")
+        return {"sucesso": False, "erro": str(e)}
+
+
+def ler_celula(planilha_id: str, nome_aba: str, celula: str) -> Dict[str, Any]:
+    """Lê o valor de uma célula específica."""
+    try:
+        if not services:
+            return {"erro": "Serviços Sheets não inicializados corretamente"}
+
+        sheets_service = services["sheets"]
+        range_name = f"{nome_aba}!{celula}"
+
+        log_debug(f"Lendo célula {celula} da aba {nome_aba}")
+        result = (
+            sheets_service.spreadsheets()
+            .values()
+            .get(spreadsheetId=planilha_id, range=range_name, valueRenderOption="FORMATTED_VALUE")
+            .execute()
+        )
+
+        values = result.get("values", [])
+        valor = values[0][0] if values and len(values[0]) > 0 else ""
+
+        log_debug(f"Valor da célula {celula}: {valor}")
+        return {
+            "sucesso": True,
+            "mensagem": f"Valor da célula {celula} lido com sucesso",
+            "planilha_id": planilha_id,
+            "aba_nome": nome_aba,
+            "celula": celula,
+            "valor": valor,
+        }
+
+    except Exception as e:
+        log_debug(f"Erro ao ler célula: {str(e)}")
+        return {"sucesso": False, "erro": str(e)}
+
+
+def buscar_dados(
+    planilha_id: str,
+    nome_aba: str,
+    termo_busca: str,
+    coluna_busca: str | None = None,
+) -> Dict[str, Any]:
+    """Busca dados específicos em uma aba."""
+    try:
+        resultado_leitura = ler_dados(planilha_id, nome_aba, incluir_cabecalhos=True)
+        if not resultado_leitura.get("sucesso"):
+            return resultado_leitura
+
+        dados = resultado_leitura.get("dados", [])
+        cabecalhos = resultado_leitura.get("cabecalhos", [])
+
+        resultados = []
+
+        for i, linha in enumerate(dados):
+            if isinstance(linha, dict):
+                if coluna_busca and coluna_busca in linha:
+                    if termo_busca.lower() in str(linha[coluna_busca]).lower():
+                        resultados.append({"linha": i + 2, "dados": linha})
+                elif not coluna_busca:
+                    for valor in linha.values():
+                        if termo_busca.lower() in str(valor).lower():
+                            resultados.append({"linha": i + 2, "dados": linha})
+                            break
+
+        log_debug(f"Busca concluída: {len(resultados)} resultados encontrados")
+        return {
+            "sucesso": True,
+            "mensagem": f"Busca concluída: {len(resultados)} resultados encontrados",
+            "planilha_id": planilha_id,
+            "aba_nome": nome_aba,
+            "termo_busca": termo_busca,
+            "coluna_busca": coluna_busca,
+            "total_resultados": len(resultados),
+            "resultados": resultados,
+        }
+
+    except Exception as e:
+        log_debug(f"Erro na busca: {str(e)}")
+        return {"sucesso": False, "erro": str(e)}
+
