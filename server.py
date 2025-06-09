@@ -887,6 +887,57 @@ async def api_adicionar_celulas(query: AdicionarCelulasRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Novos endpoints de leitura de planilhas -------------------------------
+
+@app.get("/api/drive/listar_abas")
+async def api_listar_abas(planilha_id: str):
+    """Lista todas as abas de uma planilha."""
+    try:
+        result = drive.listar_abas(planilha_id)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/drive/ler_dados")
+async def api_ler_dados(
+    planilha_id: str,
+    nome_aba: str = "Principal",
+    intervalo: str = "",
+    incluir_cabecalhos: bool = True,
+):
+    """Lê dados de uma aba específica da planilha."""
+    try:
+        result = drive.ler_dados(planilha_id, nome_aba, intervalo, incluir_cabecalhos)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/drive/ler_celula")
+async def api_ler_celula(planilha_id: str, nome_aba: str, celula: str):
+    """Lê o valor de uma célula específica."""
+    try:
+        result = drive.ler_celula(planilha_id, nome_aba, celula)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/drive/buscar_dados")
+async def api_buscar_dados(
+    planilha_id: str,
+    nome_aba: str,
+    termo_busca: str,
+    coluna_busca: str | None = None,
+):
+    """Busca dados específicos em uma aba."""
+    try:
+        result = drive.buscar_dados(planilha_id, nome_aba, termo_busca, coluna_busca)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Endpoints para operações do Trello
 @app.get("/api/trello/listar_quadros")
 async def api_trello_listar_quadros():
