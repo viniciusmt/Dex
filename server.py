@@ -431,6 +431,48 @@ def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list) -> dict:  # 
     except Exception as e:
         return {"erro": f"Erro ao adicionar células: {str(e)}"}
 
+@mcp.tool()
+def listar_abas(planilha_id: str) -> dict:
+    """Lista todas as abas de uma planilha."""
+    try:
+        return drive.listar_abas(planilha_id)
+    except Exception as e:
+        return {"erro": f"Erro ao listar abas: {str(e)}"}
+
+@mcp.tool()
+def ler_dados(
+    planilha_id: str,
+    nome_aba: str = "Principal",
+    intervalo: str = "",
+    incluir_cabecalhos: bool = True,
+) -> dict:
+    """Lê dados de uma aba da planilha."""
+    try:
+        return drive.ler_dados(planilha_id, nome_aba, intervalo, incluir_cabecalhos)
+    except Exception as e:
+        return {"erro": f"Erro ao ler dados: {str(e)}"}
+
+@mcp.tool()
+def ler_celula(planilha_id: str, nome_aba: str, celula: str) -> dict:
+    """Lê o valor de uma célula específica."""
+    try:
+        return drive.ler_celula(planilha_id, nome_aba, celula)
+    except Exception as e:
+        return {"erro": f"Erro ao ler célula: {str(e)}"}
+
+@mcp.tool()
+def buscar_dados(
+    planilha_id: str,
+    nome_aba: str,
+    termo_busca: str,
+    coluna_busca: str | None = None,
+) -> dict:
+    """Busca dados específicos em uma aba."""
+    try:
+        return drive.buscar_dados(planilha_id, nome_aba, termo_busca, coluna_busca)
+    except Exception as e:
+        return {"erro": f"Erro ao buscar dados: {str(e)}"}
+
 # 3. CORRIGIR ENDPOINTS DA API
 
 @app.post("/api/drive/criar_planilha")
@@ -590,7 +632,7 @@ Pergunta: {query.pergunta}
 Retorne um JSON neste formato:
 
 {{
-  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "search_console_listar_sites" ou "search_console_verificar_site" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "search_console_listar_sites" ou "search_console_verificar_site" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "drive_listar_abas" ou "drive_ler_dados" ou "drive_ler_celula" ou "drive_buscar_dados" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
   "parametros": {{}}
 }}
 
@@ -647,6 +689,14 @@ Apenas o JSON. Nenhuma explicação.
             resultado = drive.sobrescrever_aba(**parametros)
         elif tipo_consulta == "drive_adicionar_celulas":
             resultado = drive.adicionar_celulas(**parametros)
+        elif tipo_consulta == "drive_listar_abas":
+            resultado = drive.listar_abas(**parametros)
+        elif tipo_consulta == "drive_ler_dados":
+            resultado = drive.ler_dados(**parametros)
+        elif tipo_consulta == "drive_ler_celula":
+            resultado = drive.ler_celula(**parametros)
+        elif tipo_consulta == "drive_buscar_dados":
+            resultado = drive.buscar_dados(**parametros)
         # Operações do Trello
         elif tipo_consulta == "trello_listar_quadros":
             resultado = trello.listar_quadros()
