@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List, Literal
 from dotenv import load_dotenv
 from fastapi.openapi.utils import get_openapi
+from openapi_to_swagger import convert_openapi_to_swagger
 
 load_dotenv()
 
@@ -1101,6 +1102,17 @@ def mcp_openapi():
     return get_custom_openapi()
 
 # Sobrescreve a função openapi padrão do FastAPI
+app.openapi = get_custom_openapi
+
+# Convert OpenAPI 3 schema to Swagger 2.0 for compatibility
+_original_get_custom_openapi = get_custom_openapi
+
+def get_custom_openapi() -> dict:
+    openapi_schema = _original_get_custom_openapi()
+    swagger_schema = convert_openapi_to_swagger(openapi_schema)
+    app.openapi_schema = swagger_schema
+    return app.openapi_schema
+
 app.openapi = get_custom_openapi
 
 # Tenta integrar o router do MCP, se disponível
