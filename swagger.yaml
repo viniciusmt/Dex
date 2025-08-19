@@ -18,53 +18,20 @@ paths:
       produces:
         - application/json
       parameters:
-        - name: body
+        - name: mcpRequest
           in: body
           required: true
           schema:
-            type: object
-            properties:
-              jsonrpc:
-                type: string
-                example: "2.0"
-              id:
-                type: string
-                example: "1"
-              method:
-                type: string
-                enum: ["initialize", "tools/list", "tools/call"]
-                example: "tools/list"
-              params:
-                type: object
-                properties:
-                  name:
-                    type: string
-                    description: Nome da ferramenta a ser executada
-                  arguments:
-                    type: object
-                    description: Argumentos para a ferramenta
+            $ref: '#/definitions/MCPRequest'
       responses:
         '200':
           description: Success
           schema:
-            type: object
-            properties:
-              jsonrpc:
-                type: string
-                example: "2.0"
-              id:
-                type: string
-                example: "1"
-              result:
-                type: object
-                description: Resultado da operação MCP
-              error:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                  message:
-                    type: string
+            $ref: '#/definitions/MCPResponse'
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
 definitions:
   MCPRequest:
     type: object
@@ -73,12 +40,22 @@ definitions:
       jsonrpc:
         type: string
         enum: ["2.0"]
+        default: "2.0"
       id:
         type: string
+        default: "1"
       method:
         type: string
+        enum: ["initialize", "tools/list", "tools/call"]
       params:
         type: object
+        properties:
+          name:
+            type: string
+            description: Nome da ferramenta a ser executada
+          arguments:
+            type: object
+            description: Argumentos para a ferramenta
   MCPResponse:
     type: object
     required: ["jsonrpc", "id"]
@@ -90,5 +67,11 @@ definitions:
         type: string
       result:
         type: object
+        description: Resultado da operação MCP
       error:
         type: object
+        properties:
+          code:
+            type: integer
+          message:
+            type: string
