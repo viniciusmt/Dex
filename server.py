@@ -268,7 +268,7 @@ async def mcp_handler(request: Request):
                                 "metrica_extra": {
                                     "type": "boolean",
                                     "description": "Se deve incluir métricas extras como CTR e posição",
-                                    "default": true
+                                    "default": True
                                 },
                                 "limite": {
                                     "type": "integer",
