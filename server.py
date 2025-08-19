@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from mcp.server.fastmcp import FastMCP
 import os
 import uvicorn
@@ -26,9 +26,6 @@ print(f"Adicionado ao sys.path: {agents_dir}", file=sys.stderr)
 try:
     from agents import analytics
     from agents import search_console
-    from agents import youtube
-    from agents import drive
-    from agents import trello
 except ImportError as e:
     print(f"Erro ao importar módulos: {e}", file=sys.stderr)
     import traceback
@@ -40,7 +37,11 @@ if not ANTHROPIC_API_KEY:
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-app = FastAPI(title="Analytics Agent API")
+app = FastAPI(
+    title="Dex Analytics MCP Server",
+    description="Servidor MCP para Google Analytics e Search Console compatível com Copilot Studio",
+    version="1.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +56,279 @@ mcp = FastMCP("analytics-agent")
 @app.get("/")
 async def root():
     return {"message": "API de Analytics com Claude e MCP está funcionando!"}
+
+@app.get("/swagger.yaml")
+async def get_swagger():
+    """Serve o arquivo swagger.yaml para Copilot Studio"""
+    swagger_path = os.path.join(os.path.dirname(__file__), "swagger.yaml")
+    return FileResponse(swagger_path, media_type="text/yaml")
+
+# MCP Endpoint para Copilot Studio
+@app.post("/mcp")
+async def mcp_endpoint(request: Request):
+    """
+    Endpoint MCP compatível com Copilot Studio seguindo protocolo streamable.
+    """
+    try:
+        body = await request.json()
+        
+        # Log da requisição para debug
+        print(f"MCP Request: {json.dumps(body, indent=2)}", file=sys.stderr)
+        
+        # Resposta padrão MCP
+        response = {
+            "jsonrpc": "2.0",
+            "id": body.get("id", "1"),
+        }
+        
+        method = body.get("method")
+        params = body.get("params", {})
+        
+        if method == "initialize":
+            response["result"] = {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "dex-analytics-server",
+                    "version": "1.0.0"
+                }
+            }
+            
+        elif method == "tools/list":
+            response["result"] = {
+                "tools": [
+                    {
+                        "name": "listar_contas_ga4",
+                        "description": "Lista todas as contas do Google Analytics 4 e suas propriedades associadas",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
+                    },
+                    {
+                        "name": "consulta_ga4",
+                        "description": "Consulta dados do Google Analytics 4",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "dimensao": {
+                                    "type": "string",
+                                    "description": "Dimensões para análise (ex: 'country', 'city')",
+                                    "default": "country"
+                                },
+                                "metrica": {
+                                    "type": "string", 
+                                    "description": "Métricas para análise (ex: 'sessions', 'users')",
+                                    "default": "sessions"
+                                },
+                                "periodo": {
+                                    "type": "string",
+                                    "description": "Data de início (ex: '7daysAgo', '2024-01-01')", 
+                                    "default": "7daysAgo"
+                                },
+                                "data_fim": {
+                                    "type": "string",
+                                    "description": "Data de fim (ex: 'today', '2024-12-31')",
+                                    "default": "today"
+                                },
+                                "property_id": {
+                                    "type": "string",
+                                    "description": "ID da propriedade GA4",
+                                    "default": "properties/254018746"
+                                },
+                                "filtro_campo": {
+                                    "type": "string",
+                                    "description": "Campo para filtro"
+                                },
+                                "filtro_valor": {
+                                    "type": "string", 
+                                    "description": "Valor do filtro"
+                                },
+                                "filtro_condicao": {
+                                    "type": "string",
+                                    "description": "Condição do filtro",
+                                    "default": "igual"
+                                }
+                            },
+                            "required": []
+                        }
+                    },
+                    {
+                        "name": "consulta_ga4_pivot", 
+                        "description": "Consulta GA4 com tabela pivot para análise cruzada de dimensões",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "dimensao": {
+                                    "type": "string",
+                                    "description": "Dimensão principal",
+                                    "default": "country"
+                                },
+                                "dimensao_pivot": {
+                                    "type": "string",
+                                    "description": "Dimensão para cruzamento (pivot)", 
+                                    "default": "deviceCategory"
+                                },
+                                "metrica": {
+                                    "type": "string",
+                                    "description": "Métrica para análise",
+                                    "default": "sessions"
+                                },
+                                "periodo": {
+                                    "type": "string",
+                                    "description": "Data de início",
+                                    "default": "7daysAgo"
+                                },
+                                "data_fim": {
+                                    "type": "string",
+                                    "description": "Data de fim", 
+                                    "default": "today"
+                                },
+                                "property_id": {
+                                    "type": "string",
+                                    "description": "ID da propriedade GA4",
+                                    "default": "properties/254018746"
+                                },
+                                "limite_linhas": {
+                                    "type": "integer",
+                                    "description": "Limite de linhas no resultado",
+                                    "default": 100
+                                }
+                            },
+                            "required": []
+                        }
+                    },
+                    {
+                        "name": "listar_sites_search_console",
+                        "description": "Lista todos os sites disponíveis no Search Console",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
+                    },
+                    {
+                        "name": "consulta_search_console_custom",
+                        "description": "Consulta customizada ao Search Console com suporte a múltiplas dimensões e filtros",
+                        "inputSchema": {
+                            "type": "object", 
+                            "properties": {
+                                "site_url": {
+                                    "type": "string",
+                                    "description": "URL do site a ser analisado (obrigatório)"
+                                },
+                                "data_inicio": {
+                                    "type": "string",
+                                    "description": "Data de início",
+                                    "default": "30daysAgo"
+                                },
+                                "data_fim": {
+                                    "type": "string",
+                                    "description": "Data de fim",
+                                    "default": "today"
+                                },
+                                "dimensoes": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Lista de dimensões para análise",
+                                    "default": ["query"]
+                                },
+                                "metrica_extra": {
+                                    "type": "boolean",
+                                    "description": "Se deve incluir métricas extras como CTR e posição",
+                                    "default": true
+                                },
+                                "limite": {
+                                    "type": "integer",
+                                    "description": "Número máximo de resultados",
+                                    "default": 100
+                                },
+                                "query_filtro": {
+                                    "type": "string",
+                                    "description": "Filtro específico para queries"
+                                },
+                                "pagina_filtro": {
+                                    "type": "string",
+                                    "description": "Filtro específico para páginas"
+                                }
+                            },
+                            "required": ["site_url"]
+                        }
+                    },
+                    {
+                        "name": "verificar_propriedade_site_search_console",
+                        "description": "Verifica se um site específico está disponível no Search Console",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "site_url": {
+                                    "type": "string",
+                                    "description": "URL do site para verificar"
+                                }
+                            },
+                            "required": ["site_url"]
+                        }
+                    }
+                ]
+            }
+            
+        elif method == "tools/call":
+            tool_name = params.get("name")
+            tool_arguments = params.get("arguments", {})
+            
+            try:
+                if tool_name == "listar_contas_ga4":
+                    result = analytics.listar_contas_ga4()
+                elif tool_name == "consulta_ga4":
+                    result = analytics.consulta_ga4(**tool_arguments)
+                elif tool_name == "consulta_ga4_pivot":
+                    result = analytics.consulta_ga4_pivot(**tool_arguments) 
+                elif tool_name == "listar_sites_search_console":
+                    result = search_console.listar_sites_search_console()
+                elif tool_name == "consulta_search_console_custom":
+                    result = search_console.consulta_search_console_custom(**tool_arguments)
+                elif tool_name == "verificar_propriedade_site_search_console":
+                    result = search_console.verificar_propriedade_site_search_console(**tool_arguments)
+                else:
+                    raise ValueError(f"Ferramenta não encontrada: {tool_name}")
+                
+                response["result"] = {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(result, ensure_ascii=False, indent=2)
+                        }
+                    ]
+                }
+                
+            except Exception as e:
+                response["error"] = {
+                    "code": -32000,
+                    "message": f"Erro ao executar ferramenta {tool_name}: {str(e)}"
+                }
+                
+        else:
+            response["error"] = {
+                "code": -32601, 
+                "message": f"Método não encontrado: {method}"
+            }
+            
+        print(f"MCP Response: {json.dumps(response, indent=2)}", file=sys.stderr)
+        return response
+        
+    except Exception as e:
+        print(f"Erro no endpoint MCP: {str(e)}", file=sys.stderr)
+        return {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "error": {
+                "code": -32000,
+                "message": f"Erro interno: {str(e)}"
+            }
+        }
 
 class NaturalLanguageQuery(BaseModel):
     pergunta: str
@@ -117,57 +391,6 @@ class SearchConsoleQuery(BaseModel):
 class SearchConsoleVerificarSiteRequest(BaseModel):
     site_url: str = Field(description="URL do site para verificar")
 
-class YouTubeQuery(BaseModel):
-    pergunta: str
-
-# 1. CORRIGIR MODELOS PYDANTIC
-
-class CriarPlanilhaRequest(BaseModel):
-    nome_planilha: str  # MUDANÇA: titulo → nome_planilha
-    # REMOVER: dados_iniciais não é usado pela função criar_planilha
-
-class ListarPlanilhasRequest(BaseModel):
-    limite: int = 20  # ADICIONAR: parâmetro que a função aceita
-
-class CriarAbaRequest(BaseModel):
-    planilha_id: str
-    nome_aba: str
-    linhas: int = 100      # ADICIONAR: parâmetros opcionais da função
-    colunas: int = 20      # ADICIONAR: parâmetros opcionais da função
-
-class SobrescreverSheetRequest(BaseModel):
-    planilha_id: str
-    nome_aba: str
-    dados: List[List[Any]]
-    # Esta está correta
-
-class AdicionarCelulasRequest(BaseModel):
-    planilha_id: str
-    nome_aba: str
-    dados: List[List[Any]]
-    # REMOVER: inicio - a função não aceita este parâmetro
-
-# Classes para operações do Trello
-class TrelloListarQuadrosRequest(BaseModel):
-    pass
-
-class TrelloListarListasRequest(BaseModel):
-    board_id: str
-
-class TrelloListarCartoesRequest(BaseModel):
-    list_id: str
-
-class TrelloCriarCartaoRequest(BaseModel):
-    list_id: str
-    nome: str
-    descricao: str = ""
-
-class TrelloMoverCartaoRequest(BaseModel):
-    card_id: str
-    list_id: str
-
-class TrelloListarTarefasQuadroRequest(BaseModel):
-    board_id: str
 
 # Registrar ferramentas MCP
 @mcp.tool()
@@ -344,276 +567,8 @@ def consulta_ga4_pivot(
     except Exception as e:
         return {"erro": f"Erro na consulta GA4 Pivot: {str(e)}"}
 
-@mcp.tool()
-def analise_youtube(pergunta: str) -> dict:
-    """
-    Analisa comentários do YouTube sobre um tópico específico.
-    
-    Args:
-        pergunta: Pergunta ou tópico a ser analisado
-        
-    Returns:
-        dict: Análise dos comentários do YouTube
-    """
-    try:
-        return youtube.youtube_analyzer(pergunta)
-    except Exception as e:
-        return {"erro": f"Erro na analise_youtube: {str(e)}"}
-
-@mcp.tool()
-def criar_planilha(nome_planilha: str) -> dict:  # MUDANÇA: titulo → nome_planilha, remover dados_iniciais
-    """
-    Cria uma nova planilha no Google Drive e a compartilha com vinicius.matsumoto@fgv.br
-    
-    Args:
-        nome_planilha: Nome da planilha a ser criada
-    """
-    try:
-        return drive.criar_planilha(nome_planilha)  # MUDANÇA: passar apenas nome_planilha
-    except Exception as e:
-        return {"erro": f"Erro ao criar planilha: {str(e)}"}
-
-@mcp.tool()
-def listar_planilhas(limite: int = 20) -> dict:  # ADICIONAR: parâmetro limite
-    """
-    Lista todas as planilhas que a conta de serviço tem acesso.
-    
-    Args:
-        limite: Número máximo de planilhas a listar (padrão: 20)
-    """
-    try:
-        return drive.listar_planilhas(limite)  # MUDANÇA: passar parâmetro limite
-    except Exception as e:
-        return {"erro": f"Erro ao listar planilhas: {str(e)}"}
-
-@mcp.tool()
-def criar_aba(planilha_id: str, nome_aba: str, linhas: int = 100, colunas: int = 20) -> dict:  # ADICIONAR: parâmetros opcionais
-    """
-    Cria uma nova aba em uma planilha existente.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da nova aba
-        linhas: Número de linhas na nova aba (padrão: 100)
-        colunas: Número de colunas na nova aba (padrão: 20)
-    """
-    try:
-        return drive.criar_nova_aba(planilha_id, nome_aba, linhas, colunas)  # MUDANÇA: passar todos os parâmetros
-    except Exception as e:
-        return {"erro": f"Erro ao criar aba: {str(e)}"}
-
-@mcp.tool()
-def sobrescrever_sheet(planilha_id: str, nome_aba: str, dados: list) -> dict:
-    """
-    Sobrescreve os dados de uma aba específica.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da aba a ser sobrescrita
-        dados: Lista de dados (lista de listas)
-    """
-    try:
-        return drive.sobrescrever_aba(planilha_id, nome_aba, dados)
-    except Exception as e:
-        return {"erro": f"Erro ao sobrescrever sheet: {str(e)}"}
-
-@mcp.tool()
-def adicionar_celulas(planilha_id: str, nome_aba: str, dados: list) -> dict:  # REMOVER: parâmetro inicio
-    """
-    Adiciona dados em células específicas sem sobrescrever outras áreas.
-    
-    Args:
-        planilha_id: ID da planilha
-        nome_aba: Nome da aba
-        dados: Lista de dados (lista de listas)
-    """
-    try:
-        return drive.adicionar_celulas(planilha_id, nome_aba, dados)  # REMOVER: parâmetro inicio
-    except Exception as e:
-        return {"erro": f"Erro ao adicionar células: {str(e)}"}
-
-@mcp.tool()
-def listar_abas(planilha_id: str) -> dict:
-    """Lista todas as abas de uma planilha."""
-    try:
-        return drive.listar_abas(planilha_id)
-    except Exception as e:
-        return {"erro": f"Erro ao listar abas: {str(e)}"}
-
-@mcp.tool()
-def ler_dados(
-    planilha_id: str,
-    nome_aba: str = "Principal",
-    intervalo: str = "",
-    incluir_cabecalhos: bool = True,
-) -> dict:
-    """Lê dados de uma aba da planilha."""
-    try:
-        return drive.ler_dados(planilha_id, nome_aba, intervalo, incluir_cabecalhos)
-    except Exception as e:
-        return {"erro": f"Erro ao ler dados: {str(e)}"}
-
-@mcp.tool()
-def ler_celula(planilha_id: str, nome_aba: str, celula: str) -> dict:
-    """Lê o valor de uma célula específica."""
-    try:
-        return drive.ler_celula(planilha_id, nome_aba, celula)
-    except Exception as e:
-        return {"erro": f"Erro ao ler célula: {str(e)}"}
-
-@mcp.tool()
-def buscar_dados(
-    planilha_id: str,
-    nome_aba: str,
-    termo_busca: str,
-    coluna_busca: str | None = None,
-) -> dict:
-    """Busca dados específicos em uma aba."""
-    try:
-        return drive.buscar_dados(planilha_id, nome_aba, termo_busca, coluna_busca)
-    except Exception as e:
-        return {"erro": f"Erro ao buscar dados: {str(e)}"}
-
-# 3. CORRIGIR ENDPOINTS DA API
-
-@app.post("/api/drive/criar_planilha")
-async def api_criar_planilha(query: CriarPlanilhaRequest):
-    try:
-        result = drive.criar_planilha(query.nome_planilha)  # MUDANÇA: passar apenas nome_planilha
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/drive/listar_planilhas")
-async def api_listar_planilhas(limite: int = 20):  # ADICIONAR: parâmetro limite
-    try:
-        result = drive.listar_planilhas(limite)  # MUDANÇA: passar parâmetro limite
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/criar_aba")
-async def api_criar_aba(query: CriarAbaRequest):
-    try:
-        result = drive.criar_nova_aba(query.planilha_id, query.nome_aba, query.linhas, query.colunas)  # MUDANÇA: passar todos os parâmetros
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/sobrescrever_sheet")
-async def api_sobrescrever_sheet(query: SobrescreverSheetRequest):
-    try:
-        result = drive.sobrescrever_aba(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/adicionar_celulas")
-async def api_adicionar_celulas(query: AdicionarCelulasRequest):
-    try:
-        result = drive.adicionar_celulas(query.planilha_id, query.nome_aba, query.dados)  # REMOVER: parâmetro inicio
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-
-# Ferramentas para Trello
-@mcp.tool()
-def trello_listar_quadros() -> dict:
-    """
-    Lista todos os quadros do Trello do usuário.
-    
-    Returns:
-        dict: Informações sobre quadros disponíveis
-    """
-    try:
-        return trello.listar_quadros()
-    except Exception as e:
-        return {"erro": f"Erro ao listar quadros do Trello: {str(e)}"}
-
-@mcp.tool()
-def trello_listar_listas(board_id: str) -> dict:
-    """
-    Lista todas as listas (colunas) de um quadro do Trello.
-    
-    Args:
-        board_id: ID do quadro do Trello
-        
-    Returns:
-        dict: Informações sobre as listas do quadro
-    """
-    try:
-        return trello.listar_listas(board_id)
-    except Exception as e:
-        return {"erro": f"Erro ao listar listas do Trello: {str(e)}"}
-
-@mcp.tool()
-def trello_listar_cartoes(list_id: str) -> dict:
-    """
-    Lista todos os cartões (tarefas) de uma lista do Trello.
-    
-    Args:
-        list_id: ID da lista do Trello
-        
-    Returns:
-        dict: Informações sobre os cartões da lista
-    """
-    try:
-        return trello.listar_cartoes(list_id)
-    except Exception as e:
-        return {"erro": f"Erro ao listar cartões do Trello: {str(e)}"}
-
-@mcp.tool()
-def trello_criar_cartao(list_id: str, nome: str, descricao: str = "") -> dict:
-    """
-    Cria um novo cartão (tarefa) em uma lista do Trello.
-    
-    Args:
-        list_id: ID da lista onde o cartão será criado
-        nome: Nome do cartão/tarefa
-        descricao: Descrição do cartão (opcional)
-        
-    Returns:
-        dict: Informações sobre o cartão criado
-    """
-    try:
-        return trello.criar_cartao(list_id, nome, descricao)
-    except Exception as e:
-        return {"erro": f"Erro ao criar cartão do Trello: {str(e)}"}
-
-@mcp.tool()
-def trello_mover_cartao(card_id: str, list_id: str) -> dict:
-    """
-    Move um cartão (tarefa) para outra lista no Trello.
-    
-    Args:
-        card_id: ID do cartão a ser movido
-        list_id: ID da lista de destino
-        
-    Returns:
-        dict: Informações sobre o resultado da operação
-    """
-    try:
-        return trello.mover_cartao(card_id, list_id)
-    except Exception as e:
-        return {"erro": f"Erro ao mover cartão do Trello: {str(e)}"}
-
-@mcp.tool()
-def trello_listar_tarefas_quadro(board_id: str) -> dict:
-    """
-    Lista todas as tarefas de um quadro do Trello organizadas por lista.
-    
-    Args:
-        board_id: ID do quadro do Trello
-        
-    Returns:
-        dict: Todas as tarefas organizadas por lista
-    """
-    try:
-        return trello.listar_tarefas_quadro(board_id)
-    except Exception as e:
-        return {"erro": f"Erro ao listar tarefas do quadro Trello: {str(e)}"}
 
 @app.post("/perguntar")
 async def perguntar(query: NaturalLanguageQuery):
@@ -633,7 +588,7 @@ Pergunta: {query.pergunta}
 Retorne um JSON neste formato:
 
 {{
-  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "search_console_listar_sites" ou "search_console_verificar_site" ou "youtube" ou "drive_criar_planilha" ou "drive_listar_planilhas" ou "drive_criar_aba" ou "drive_sobrescrever_aba" ou "drive_adicionar_celulas" ou "drive_listar_abas" ou "drive_ler_dados" ou "drive_ler_celula" ou "drive_buscar_dados" ou "listar_contas_ga4" ou "trello_listar_quadros" ou "trello_listar_listas" ou "trello_listar_cartoes" ou "trello_criar_cartao" ou "trello_mover_cartao" ou "trello_listar_tarefas_quadro",
+  "tipo_consulta": "ga4" ou "ga4_pivot" ou "search_console" ou "search_console_listar_sites" ou "search_console_verificar_site" ou "listar_contas_ga4",
   "parametros": {{}}
 }}
 
@@ -675,42 +630,8 @@ Apenas o JSON. Nenhuma explicação.
             resultado = search_console.listar_sites_search_console()
         elif tipo_consulta == "search_console_verificar_site":
             resultado = search_console.verificar_propriedade_site_search_console(**parametros)
-        elif tipo_consulta == "youtube":
-            resultado = youtube.youtube_analyzer(parametros.get("pergunta", query.pergunta))
         elif tipo_consulta == "listar_contas_ga4":
             resultado = analytics.listar_contas_ga4()
-        # Operações de Drive
-        elif tipo_consulta == "drive_criar_planilha":
-            resultado = drive.criar_planilha(**parametros)
-        elif tipo_consulta == "drive_listar_planilhas":
-            resultado = drive.listar_planilhas()
-        elif tipo_consulta == "drive_criar_aba":
-            resultado = drive.criar_nova_aba(**parametros)
-        elif tipo_consulta == "drive_sobrescrever_aba":
-            resultado = drive.sobrescrever_aba(**parametros)
-        elif tipo_consulta == "drive_adicionar_celulas":
-            resultado = drive.adicionar_celulas(**parametros)
-        elif tipo_consulta == "drive_listar_abas":
-            resultado = drive.listar_abas(**parametros)
-        elif tipo_consulta == "drive_ler_dados":
-            resultado = drive.ler_dados(**parametros)
-        elif tipo_consulta == "drive_ler_celula":
-            resultado = drive.ler_celula(**parametros)
-        elif tipo_consulta == "drive_buscar_dados":
-            resultado = drive.buscar_dados(**parametros)
-        # Operações do Trello
-        elif tipo_consulta == "trello_listar_quadros":
-            resultado = trello.listar_quadros()
-        elif tipo_consulta == "trello_listar_listas":
-            resultado = trello.listar_listas(**parametros)
-        elif tipo_consulta == "trello_listar_cartoes":
-            resultado = trello.listar_cartoes(**parametros)
-        elif tipo_consulta == "trello_criar_cartao":
-            resultado = trello.criar_cartao(**parametros)
-        elif tipo_consulta == "trello_mover_cartao":
-            resultado = trello.mover_cartao(**parametros)
-        elif tipo_consulta == "trello_listar_tarefas_quadro":
-            resultado = trello.listar_tarefas_quadro(**parametros)
         else:
             raise HTTPException(status_code=400, detail="Tipo de consulta não reconhecido")
 
@@ -839,154 +760,6 @@ async def api_consulta_search_console(query: SearchConsoleQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/analise_youtube")
-async def api_analise_youtube(query: YouTubeQuery):
-    try:
-        result = youtube.youtube_analyzer(query.pergunta)
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Endpoints para as operações de Drive/Sheets
-@app.post("/api/drive/criar_planilha")
-async def api_criar_planilha(query: CriarPlanilhaRequest):
-    try:
-        result = drive.criar_planilha(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/drive/listar_planilhas")
-async def api_listar_planilhas():
-    try:
-        result = drive.listar_planilhas()
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/criar_aba")
-async def api_criar_aba(query: CriarAbaRequest):
-    try:
-        result = drive.criar_nova_aba(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/sobrescrever_sheet")
-async def api_sobrescrever_sheet(query: SobrescreverSheetRequest):
-    try:
-        result = drive.sobrescrever_aba(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/drive/adicionar_celulas")
-async def api_adicionar_celulas(query: AdicionarCelulasRequest):
-    try:
-        result = drive.adicionar_celulas(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Novos endpoints de leitura de planilhas -------------------------------
-
-@app.get("/api/drive/listar_abas")
-async def api_listar_abas(planilha_id: str):
-    """Lista todas as abas de uma planilha."""
-    try:
-        result = drive.listar_abas(planilha_id)
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/drive/ler_dados")
-async def api_ler_dados(
-    planilha_id: str,
-    nome_aba: str = "Principal",
-    intervalo: str = "",
-    incluir_cabecalhos: bool = True,
-):
-    """Lê dados de uma aba específica da planilha."""
-    try:
-        result = drive.ler_dados(planilha_id, nome_aba, intervalo, incluir_cabecalhos)
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/drive/ler_celula")
-async def api_ler_celula(planilha_id: str, nome_aba: str, celula: str):
-    """Lê o valor de uma célula específica."""
-    try:
-        result = drive.ler_celula(planilha_id, nome_aba, celula)
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/drive/buscar_dados")
-async def api_buscar_dados(
-    planilha_id: str,
-    nome_aba: str,
-    termo_busca: str,
-    coluna_busca: str | None = None,
-):
-    """Busca dados específicos em uma aba."""
-    try:
-        result = drive.buscar_dados(planilha_id, nome_aba, termo_busca, coluna_busca)
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Endpoints para operações do Trello
-@app.get("/api/trello/listar_quadros")
-async def api_trello_listar_quadros():
-    try:
-        result = trello.listar_quadros()
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trello/listar_listas")
-async def api_trello_listar_listas(query: TrelloListarListasRequest):
-    try:
-        result = trello.listar_listas(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trello/listar_cartoes")
-async def api_trello_listar_cartoes(query: TrelloListarCartoesRequest):
-    try:
-        result = trello.listar_cartoes(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trello/criar_cartao")
-async def api_trello_criar_cartao(query: TrelloCriarCartaoRequest):
-    try:
-        result = trello.criar_cartao(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trello/mover_cartao")
-async def api_trello_mover_cartao(query: TrelloMoverCartaoRequest):
-    try:
-        result = trello.mover_cartao(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/trello/listar_tarefas_quadro")
-async def api_trello_listar_tarefas_quadro(query: TrelloListarTarefasQuadroRequest):
-    try:
-        result = trello.listar_tarefas_quadro(**query.dict())
-        return {"result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/routes")
 async def list_routes():
@@ -1039,21 +812,9 @@ async def debug_credentials():
             except json.JSONDecodeError:
                 json_valid = False
         
-        # Verifica se YOUTUBE_API_KEY existe
-        youtube_key = os.getenv("YOUTUBE_API_KEY")
-        has_youtube_key = youtube_key is not None
-        
         # Verifica se ANTHROPIC_API_KEY existe
         claude_key = os.getenv("ANTHROPIC_API_KEY")
         has_claude_key = claude_key is not None
-
-        # Verifica se TRELLO_API_KEY existe
-        trello_key = os.getenv("TRELLO_API_KEY")
-        has_trello_key = trello_key is not None
-
-        # Verifica se TRELLO_TOKEN existe
-        trello_token = os.getenv("TRELLO_TOKEN")
-        has_trello_token = trello_token is not None
 
         # Retorna as informações de diagnóstico
         return {
@@ -1061,10 +822,7 @@ async def debug_credentials():
                 "has_google_credentials": has_google_creds,
                 "google_credentials_valid_json": json_valid,
                 "google_credentials_info": creds_info,
-                "has_youtube_api_key": has_youtube_key,
-                "has_anthropic_api_key": has_claude_key,
-                "has_trello_api_key": has_trello_key,
-                "has_trello_token": has_trello_token
+                "has_anthropic_api_key": has_claude_key
             }
         }
     except Exception as e:

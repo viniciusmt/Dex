@@ -1,0 +1,94 @@
+swagger: '2.0'
+info:
+  title: Dex Analytics MCP Server
+  description: MCP Server para Google Analytics e Search Console compatível com Copilot Studio
+  version: 1.0.0
+host: dex-mcp-server-1212.onrender.com
+basePath: /
+schemes:
+  - https
+paths:
+  /mcp:
+    post:
+      summary: Dex Analytics MCP Server
+      x-ms-agentic-protocol: mcp-streamable-1.0
+      operationId: InvokeMCP
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              jsonrpc:
+                type: string
+                example: "2.0"
+              id:
+                type: string
+                example: "1"
+              method:
+                type: string
+                enum: ["initialize", "tools/list", "tools/call"]
+                example: "tools/list"
+              params:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Nome da ferramenta a ser executada
+                  arguments:
+                    type: object
+                    description: Argumentos para a ferramenta
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: object
+            properties:
+              jsonrpc:
+                type: string
+                example: "2.0"
+              id:
+                type: string
+                example: "1"
+              result:
+                type: object
+                description: Resultado da operação MCP
+              error:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+definitions:
+  MCPRequest:
+    type: object
+    required: ["jsonrpc", "method"]
+    properties:
+      jsonrpc:
+        type: string
+        enum: ["2.0"]
+      id:
+        type: string
+      method:
+        type: string
+      params:
+        type: object
+  MCPResponse:
+    type: object
+    required: ["jsonrpc", "id"]
+    properties:
+      jsonrpc:
+        type: string
+        enum: ["2.0"]
+      id:
+        type: string
+      result:
+        type: object
+      error:
+        type: object
