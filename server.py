@@ -66,6 +66,13 @@ async def get_swagger():
 # MCP Endpoint para Copilot Studio
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
+    return await mcp_handler(request)
+
+@app.post("/api/mcp")  
+async def mcp_api_endpoint(request: Request):
+    return await mcp_handler(request)
+
+async def mcp_handler(request: Request):
     """
     Endpoint MCP compatível com Copilot Studio seguindo protocolo streamable.
     """

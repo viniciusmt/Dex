@@ -4,7 +4,7 @@ info:
   description: MCP Server para Google Analytics e Search Console compatível com Copilot Studio
   version: 1.0.0
 host: dex-mcp-server-1212.onrender.com
-basePath: /
+basePath: /api
 schemes:
   - https
 paths:
@@ -18,60 +18,23 @@ paths:
       produces:
         - application/json
       parameters:
-        - name: mcpRequest
+        - name: body
           in: body
           required: true
           schema:
-            $ref: '#/definitions/MCPRequest'
+            type: object
+            properties:
+              jsonrpc:
+                type: string
+                default: "2.0"
+              id:
+                type: string
+                default: "1"
+              method:
+                type: string
+                enum: ["initialize", "tools/list", "tools/call"]
+              params:
+                type: object
       responses:
         '200':
           description: Success
-          schema:
-            $ref: '#/definitions/MCPResponse'
-        '400':
-          description: Bad Request
-        '500':
-          description: Internal Server Error
-definitions:
-  MCPRequest:
-    type: object
-    required: ["jsonrpc", "method"]
-    properties:
-      jsonrpc:
-        type: string
-        enum: ["2.0"]
-        default: "2.0"
-      id:
-        type: string
-        default: "1"
-      method:
-        type: string
-        enum: ["initialize", "tools/list", "tools/call"]
-      params:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Nome da ferramenta a ser executada
-          arguments:
-            type: object
-            description: Argumentos para a ferramenta
-  MCPResponse:
-    type: object
-    required: ["jsonrpc", "id"]
-    properties:
-      jsonrpc:
-        type: string
-        enum: ["2.0"]
-      id:
-        type: string
-      result:
-        type: object
-        description: Resultado da operação MCP
-      error:
-        type: object
-        properties:
-          code:
-            type: integer
-          message:
-            type: string
