@@ -77,7 +77,29 @@ async def mcp_handler(request: Request):
     Endpoint MCP compatível com Copilot Studio seguindo protocolo streamable.
     """
     try:
-        body = await request.json()
+        # Tenta ler como JSON primeiro
+        try:
+            body = await request.json()
+        except Exception as json_error:
+            # Se falhar, tenta ler como texto e fazer parse manual
+            text_body = await request.body()
+            text_content = text_body.decode('utf-8').strip()
+            
+            # Remove possíveis múltiplos JSONs, pega apenas o primeiro
+            lines = text_content.split('\n')
+            json_lines = []
+            brace_count = 0
+            
+            for line in lines:
+                if line.strip():
+                    json_lines.append(line)
+                    brace_count += line.count('{') - line.count('}')
+                    if brace_count == 0 and json_lines:
+                        break
+            
+            first_json = '\n'.join(json_lines)
+            print(f"Extracted JSON: {first_json}", file=sys.stderr)
+            body = json.loads(first_json)
         
         # Log da requisição para debug
         print(f"MCP Request: {json.dumps(body, indent=2)}", file=sys.stderr)
